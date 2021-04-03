@@ -10,6 +10,7 @@ import org.asamk.signal.JsonDbusReceiveMessageHandler;
 import org.asamk.signal.OutputType;
 import org.asamk.signal.commands.exceptions.CommandException;
 import org.asamk.signal.commands.exceptions.UnexpectedErrorException;
+import org.asamk.signal.dbus.DbusSignalControlImpl;
 import org.asamk.signal.dbus.DbusSignalImpl;
 import org.asamk.signal.manager.Manager;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
@@ -18,7 +19,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -80,7 +80,9 @@ public class DaemonCommand implements MultiLocalCommand {
     }
 
     @Override
-    public void handleCommand(final Namespace ns, final List<Manager> managers) throws CommandException {
+    public void handleCommand(
+            final Namespace ns, final List<Manager> managers, SignalCreator c
+    ) throws CommandException {
         var inJson = ns.get("output") == OutputType.JSON || ns.getBoolean("json");
 
         // TODO delete later when "json" variable is removed
@@ -98,21 +100,24 @@ public class DaemonCommand implements MultiLocalCommand {
         }
 
         try (var conn = DBusConnection.getConnection(busType)) {
-            var receiveThreads = new ArrayList<Thread>();
+            final var signalControl = new DbusSignalControlImpl(c, m -> {
+                try {
+                    final var objectPath = DbusConfig.getObjectPath(m.getUsername());
+                    return run(conn, objectPath, m, ignoreAttachments, inJson);
+                } catch (DBusException e) {
+                    logger.error("Failed to export object", e);
+                    return null;
+                }
+            });
+            conn.exportObject(DbusConfig.getObjectPath(), signalControl);
+
             for (var m : managers) {
-                var objectPath = DbusConfig.getObjectPath(m.getUsername());
-                var thread = run(conn, objectPath, m, ignoreAttachments, inJson);
-                receiveThreads.add(thread);
+                signalControl.addManager(m);
             }
 
             conn.requestBusName(DbusConfig.getBusname());
 
-            for (var t : receiveThreads) {
-                try {
-                    t.join();
-                } catch (InterruptedException ignored) {
-                }
-            }
+            signalControl.run();
         } catch (DBusException | IOException e) {
             logger.error("Dbus command failed", e);
             throw new UnexpectedErrorException("Dbus command failed");
@@ -123,6 +128,8 @@ public class DaemonCommand implements MultiLocalCommand {
             DBusConnection conn, String objectPath, Manager m, boolean ignoreAttachments, boolean inJson
     ) throws DBusException {
         conn.exportObject(objectPath, new DbusSignalImpl(m));
+
+        logger.info("Exported dbus object: " + objectPath);
 
         final var thread = new Thread(() -> {
             while (true) {
@@ -139,8 +146,6 @@ public class DaemonCommand implements MultiLocalCommand {
                 }
             }
         });
-
-        logger.info("Exported dbus object: " + objectPath);
 
         thread.start();
 
