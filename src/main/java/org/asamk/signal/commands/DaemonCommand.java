@@ -14,25 +14,31 @@ import org.asamk.signal.OutputWriter;
 import org.asamk.signal.PlainTextWriter;
 import org.asamk.signal.commands.SignalCreator;
 import org.asamk.signal.commands.exceptions.CommandException;
+import org.asamk.signal.commands.exceptions.IOErrorException;
 import org.asamk.signal.commands.exceptions.UnexpectedErrorException;
 import org.asamk.signal.dbus.DbusSignalControlImpl;
 import org.asamk.signal.dbus.DbusSignalImpl;
 import org.asamk.signal.manager.Manager;
+import org.asamk.signal.manager.PathConfig;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.whispersystems.signalservice.api.util.InvalidNumberException;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class DaemonCommand implements MultiLocalCommand {
 
     private final static Logger logger = LoggerFactory.getLogger(DaemonCommand.class);
-    private final OutputWriter outputWriter;
+    private static OutputWriter outputWriter;
 
     public static void attachToSubparser(final Subparser subparser) {
         subparser.help("Run in daemon mode and provide an experimental dbus interface.");
@@ -42,10 +48,17 @@ public class DaemonCommand implements MultiLocalCommand {
         subparser.addArgument("--ignore-attachments")
                 .help("Don’t download attachments of received messages.")
                 .action(Arguments.storeTrue());
+        subparser.addArgument("--number").help("Phone number").nargs("*")
+                .help("List of number(s) to attach to anonymous daemon (default=all)");
+
     }
 
     public DaemonCommand(final OutputWriter outputWriter) {
         this.outputWriter = outputWriter;
+    }
+
+    public static OutputWriter getOutputWriter() {
+        return outputWriter;
     }
 
     @Override
@@ -57,6 +70,7 @@ public class DaemonCommand implements MultiLocalCommand {
     public void handleCommand(
             final Namespace ns, final Manager manager, SignalCreator c
     ) throws CommandException {
+        //single-user mode
         boolean ignoreAttachments = ns.getBoolean("ignore-attachments");
         DBusConnection.DBusBusType busType;
         if (ns.getBoolean("system")) {
@@ -91,6 +105,7 @@ public class DaemonCommand implements MultiLocalCommand {
     public void handleCommand(
             final Namespace ns, final List<Manager> managers, SignalCreator c
     ) throws CommandException {
+        //anonymous mode
         boolean ignoreAttachments = ns.getBoolean("ignore-attachments");
 
         DBusConnection.DBusBusType busType;
@@ -112,8 +127,28 @@ public class DaemonCommand implements MultiLocalCommand {
             }, DbusConfig.getObjectPath());
             conn.exportObject(signalControl);
 
+            //when the App gets a MultiLocalCommand (i.e., a daemon command),
+            //it by default loads a manager for all local usernames
+            //so we need to pare that back here if only some names were listed
+            List<String> daemonUsernames = ns.<String>getList("number");
+            if (daemonUsernames == null) {
+                daemonUsernames = List.of();
+            }
             for (var m : managers) {
-                signalControl.addManager(m);
+                String u = m.getUsername();
+                //--number option was not given, so add all local usernames to signalControl
+                if (daemonUsernames.size() == 0) {
+                    signalControl.addManager(m);
+                } else {
+                    //one or more numbers were specified by --number option
+                    if (daemonUsernames.contains(u)) {
+                        //add listed managers to signalControl
+                        signalControl.addManager(m);
+                    } else {
+                        //close managers not listed (can be added later by listen())
+                        m.close();
+                    }
+                }
             }
 
             conn.requestBusName(DbusConfig.getBusname());

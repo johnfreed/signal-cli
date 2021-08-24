@@ -2,12 +2,15 @@ package org.asamk.signal.dbus;
 
 import org.asamk.Signal;
 import org.asamk.SignalControl;
-import org.asamk.SignalControl.Error;
+import org.asamk.Signal.Error;
+import org.asamk.SignalControl.SCError;
 import org.asamk.signal.BaseConfig;
+import org.asamk.signal.DbusConfig;
 import org.asamk.signal.OutputWriter;
 import org.asamk.signal.PlainTextWriter;
 import org.asamk.signal.PlainTextWriterImpl;
 import org.asamk.signal.commands.GetUserStatusCommand;
+import org.asamk.signal.commands.SignalCreator;
 import org.asamk.signal.commands.UpdateGroupCommand;
 import org.asamk.signal.OutputWriter;
 import org.asamk.signal.commands.exceptions.CommandException;
@@ -19,7 +22,9 @@ import org.asamk.signal.manager.AttachmentInvalidException;
 import org.asamk.signal.manager.AvatarStore;
 import org.asamk.signal.manager.Manager;
 import org.asamk.signal.manager.NotMasterDeviceException;
+import org.asamk.signal.manager.PathConfig;
 import org.asamk.signal.manager.StickerPackInvalidException;
+import org.asamk.signal.manager.UserAlreadyExists;
 import org.asamk.signal.manager.api.Device;
 import org.asamk.signal.manager.api.TypingAction;
 import org.asamk.signal.manager.groups.GroupId;
@@ -37,17 +42,24 @@ import org.asamk.signal.util.ErrorUtils;
 import org.asamk.signal.util.Hex;
 import org.asamk.signal.util.Util;
 
+import org.freedesktop.dbus.DBusPath;
+import org.freedesktop.dbus.interfaces.DBusInterface;
+import org.freedesktop.dbus.connections.impl.DBusConnection;
+import org.freedesktop.dbus.exceptions.DBusException;
 import org.freedesktop.dbus.exceptions.DBusExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.whispersystems.libsignal.InvalidKeyException;
 import org.whispersystems.libsignal.util.Pair;
 import org.whispersystems.libsignal.util.guava.Optional;
+import org.whispersystems.signalservice.api.KeyBackupServicePinException;
+import org.whispersystems.signalservice.api.KeyBackupSystemNoDataException;
 import org.whispersystems.signalservice.api.crypto.UntrustedIdentityException;
 import org.whispersystems.signalservice.api.groupsv2.GroupLinkNotActiveException;
 import org.whispersystems.signalservice.api.messages.SendMessageResult;
 import org.whispersystems.signalservice.api.messages.SignalServiceTypingMessage;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
+import org.whispersystems.signalservice.api.push.exceptions.CaptchaRequiredException;
 import org.whispersystems.signalservice.api.util.InvalidNumberException;
 import org.whispersystems.signalservice.internal.contacts.crypto.UnauthenticatedResponseException;
 
@@ -63,8 +75,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.stream.Stream.*;
+import java.util.Comparator;
+import java.nio.file.Files;
+import java.nio.file.FileVisitResult.*;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import static org.asamk.signal.util.Util.getLegacyIdentifier;
 
@@ -73,6 +92,7 @@ public class DbusSignalImpl implements Signal {
     private final Manager m;
     private final String objectPath;
     private final static Logger logger = LoggerFactory.getLogger(DbusSignalImpl.class);
+
 
     public DbusSignalImpl(final Manager m, final String objectPath) {
         this.m = m;
@@ -93,7 +113,7 @@ public class DbusSignalImpl implements Signal {
     public void updateAccount() {
          try {
              m.updateAccountAttributes();
-         } catch (IOException | Error.Failure e) {
+         } catch (IOException | Signal.Error.Failure e) {
              throw new Error.Failure("UpdateAccount error: " + e.getMessage());
          }
     }
@@ -144,7 +164,7 @@ public class DbusSignalImpl implements Signal {
         return sendMessage(message, attachments, recipients);
     }
 
-    private static void checkSendMessageResult(long timestamp, SendMessageResult result) throws DBusExecutionException {
+    public static void checkSendMessageResult(long timestamp, SendMessageResult result) throws DBusExecutionException {
         var error = ErrorUtils.getErrorMessageFromSendMessageResult(result);
 
         if (error == null) {
@@ -160,7 +180,7 @@ public class DbusSignalImpl implements Signal {
         }
     }
 
-    private static void checkSendMessageResults(
+    public static void checkSendMessageResults(
             long timestamp, List<SendMessageResult> results
     ) throws DBusExecutionException {
         if (results.size() == 1) {
@@ -1190,17 +1210,7 @@ public class DbusSignalImpl implements Signal {
     // future interface changes
     @Override
     public String version() {
-        return DbusSignalControlImpl.version();
-    }
-
-    @Override
-    public String link() {
-        return DbusSignalControlImpl.link();
-    }
-
-    @Override
-    public String link(String newDeviceName) {
-        return DbusSignalControlImpl.link(newDeviceName);
+        return BaseConfig.PROJECT_VERSION;
     }
 
     @Override
@@ -1208,9 +1218,9 @@ public class DbusSignalImpl implements Signal {
         try {
             m.addDeviceLink(new URI(uri));
         } catch (IOException | InvalidKeyException e) {
-            throw new Error.Failure(e.getClass().getSimpleName() + "Add device link failed. " + e.getMessage());
+            throw new Error.Failure(e.getClass().getSimpleName() + " Add device link failed. " + e.getMessage());
         } catch (URISyntaxException e) {
-            throw new Error.Failure(e.getClass().getSimpleName() + "Device link uri has invalid format: " + e.getMessage());
+            throw new Error.Failure(e.getClass().getSimpleName() + " Device link uri has invalid format: " + e.getMessage());
         }
     }
 
@@ -1219,43 +1229,41 @@ public class DbusSignalImpl implements Signal {
         try {
             m.removeLinkedDevices(deviceId);
         } catch (IOException e) {
-            throw new Error.Failure(e.getClass().getSimpleName() + "Error while removing device: " + e.getMessage());
+            throw new Error.Failure(e.getClass().getSimpleName() + ": Error while removing device: " + e.getMessage());
         }
     }
 
     @Override
-    public void register(
-            String number, boolean voiceVerification
-    ) {
-        DbusSignalControlImpl.register(number, voiceVerification);
-    }
-
-    @Override
-    public void registerWithCaptcha(
-            String number, boolean voiceVerification, String captcha
-    ) {
-        DbusSignalControlImpl.registerWithCaptcha(number, voiceVerification, captcha);
+    public void unlisten(boolean keepData) {
+        try {
+            if (!keepData) {
+                removeUserData(m.getUsername());
+            }
+            String objectPath = DbusConfig.getObjectPath(m.getUsername());
+            DBusConnection.DBusBusType busType = getDbusType(this);
+            var conn = DBusConnection.getConnection(busType);
+            conn.unExportObject(objectPath);
+            m.close();
+            logger.info("unExported dbus object: " + objectPath);
+        } catch (IOException | DBusException e) {
+            throw new Error.Failure(e.getClass().getSimpleName() + " Unlisten error: " + e.getMessage());
+        }
     }
 
     @Override
     public void unregister() {
+        unregister(true);
+    }
+
+    @Override
+    public void unregister(boolean keepData) {
         try {
             m.unregister();
-            logger.info("Unregister succeeded, exiting.\n");
-            System.exit(0);
-        } catch (IOException e) {
+            DBusConnection.DBusBusType busType = getDbusType(this);
+            unlisten(keepData);
+       } catch (Exception e) {
             throw new Error.Failure(e.getClass().getSimpleName() + "Unregister error: " + e.getMessage());
         }
-    }
-
-    @Override
-    public void verify(String number, String verificationCode) {
-        DbusSignalControlImpl.verify(number, verificationCode);
-    }
-
-    @Override
-    public void verifyWithPin(String number, String verificationCode, String pin) {
-        DbusSignalControlImpl.verifyWithPin(number, verificationCode, pin);
     }
 
     // Create a unique list of Numbers from Identities and Contacts to really get
@@ -1594,7 +1602,6 @@ public class DbusSignalImpl implements Signal {
         }
     }
 
-    @Override
     public String uploadStickerPack(String stickerPackPath) {
         File path = new File(stickerPackPath);
 
@@ -1605,5 +1612,41 @@ public class DbusSignalImpl implements Signal {
         } catch (StickerPackInvalidException e) {
             throw new Error.Failure("Invalid sticker pack: " + e.getMessage());
         }
+    }
+
+    private void removeUserData(String number) {
+        PathConfig pathConfig = m.getPathConfig();
+        File dataPath = pathConfig.getDataPath();
+        number.replaceFirst("_", "+");
+        String eraseFileName = dataPath.getAbsolutePath() + File.separator + number;
+        File eraseFile = new File(eraseFileName);
+        if (eraseFile.delete()) {
+            logger.info("erased " + eraseFileName);
+        } else {
+            logger.error("erase failed for " + eraseFileName);
+        }
+        String erasePath = dataPath.getAbsolutePath() + File.separator + number + ".d/";
+        Path rootPath = Paths.get(erasePath);
+        try (Stream<Path> walk = Files.walk(rootPath)) {
+            walk.sorted(Comparator.reverseOrder())
+                .map(Path::toFile)
+                .forEach(File::delete);
+        } catch (IOException e) {
+            throw new Error.Failure(e.getClass().getSimpleName() + " RemoveUserData failed. " + e.getMessage());
+        }
+    }
+
+    public static DBusConnection.DBusBusType getDbusType(DBusInterface iface) {
+        DBusConnection.DBusBusType busType = null;
+        String objectPath = DbusConfig.getObjectPath();
+        try {
+            var conn = DBusConnection.getConnection(org.freedesktop.dbus.connections.impl.DBusConnection.DBusBusType.SESSION);
+            conn.exportObject(objectPath, iface);
+            conn.unExportObject(objectPath);
+            busType = org.freedesktop.dbus.connections.impl.DBusConnection.DBusBusType.SYSTEM;
+        } catch (DBusException e) {
+            busType = org.freedesktop.dbus.connections.impl.DBusConnection.DBusBusType.SESSION;
+        }
+        return busType;
     }
 }

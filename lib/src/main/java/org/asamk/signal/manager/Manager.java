@@ -183,6 +183,7 @@ public class Manager implements Closeable {
     private final ProfileHelper profileHelper;
     private final GroupV2Helper groupV2Helper;
     private final PinHelper pinHelper;
+    private final PathConfig pathConfig;
     private final AvatarStore avatarStore;
     private final AttachmentStore attachmentStore;
     private final StickerPackStore stickerPackStore;
@@ -204,6 +205,7 @@ public class Manager implements Closeable {
     ) {
         this.account = account;
         this.serviceEnvironmentConfig = serviceEnvironmentConfig;
+        this.pathConfig = pathConfig;
 
         final var credentialsProvider = new DynamicCredentialsProvider(account.getUuid(),
                 account.getUsername(),
@@ -239,6 +241,10 @@ public class Manager implements Closeable {
         this.stickerPackStore = new StickerPackStore(pathConfig.getStickerPacksPath());
     }
 
+    public PathConfig getPathConfig() {
+        return pathConfig;
+    }
+
     public String getUsername() {
         return account.getUsername();
     }
@@ -263,7 +269,6 @@ public class Manager implements Closeable {
             String username, File settingsPath, ServiceEnvironment serviceEnvironment, String userAgent
     ) throws IOException, NotRegisteredException {
         var pathConfig = PathConfig.createDefault(settingsPath);
-
         if (!SignalAccount.userExists(pathConfig.getDataPath(), username)) {
             throw new NotRegisteredException();
         }
@@ -2041,8 +2046,12 @@ public class Manager implements Closeable {
             SignalServiceContent content = null;
             Exception exception = null;
             final CachedMessage[] cachedMessage = {null};
-            account.setLastReceiveTimestamp(System.currentTimeMillis());
+            if (account == null) {
+                logger.debug("Account closed.");
+                break;
+            }
             logger.debug("Checking for new message from server");
+            account.setLastReceiveTimestamp(System.currentTimeMillis());
             try {
                 var result = signalWebSocket.readOrEmpty(unit.toMillis(timeout), envelope1 -> {
                     final var recipientId = envelope1.hasSource()
@@ -2088,6 +2097,10 @@ public class Manager implements Closeable {
                 continue;
             } catch (TimeoutException e) {
                 if (returnOnTimeout) return;
+                continue;
+            } catch (IOException e) {
+                logger.debug("Unexpected IO error, continuing.");
+                signalWebSocket.connect();
                 continue;
             }
 
@@ -2948,7 +2961,6 @@ public class Manager implements Closeable {
 
     void close(boolean closeAccount) throws IOException {
         executor.shutdown();
-
         dependencies.getSignalWebSocket().disconnect();
 
         if (closeAccount && account != null) {

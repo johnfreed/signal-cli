@@ -34,6 +34,7 @@ import org.whispersystems.signalservice.api.util.PhoneNumberFormatter;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static net.sourceforge.argparse4j.DefaultSettings.VERSION_0_9_0_DEFAULT_SETTINGS;
@@ -85,9 +86,7 @@ public class App {
         return parser;
     }
 
-    public App(
-        final Namespace ns
-        ) {
+    public App(final Namespace ns) {
         this.ns = ns;
     }
 
@@ -256,8 +255,8 @@ public class App {
             } catch (CommandException e) {
                 logger.warn("Ignoring {}: {}", u, e.getMessage());
             }
-        }
 
+        }
         command.handleCommand(ns, managers, c);
 
         for (var m : managers) {
@@ -287,6 +286,7 @@ public class App {
             public RegistrationManager getNewRegistrationManager(String username) throws IOException {
                 return RegistrationManager.init(username, dataPath, serviceEnvironment, BaseConfig.USER_AGENT);
             }
+
         };
 
         Manager manager = null;
@@ -306,11 +306,11 @@ public class App {
     }
 
     private Manager loadManager(
-            final String username, final File dataPath, final ServiceEnvironment serviceEnvironment
+            final String username, final File settingsPath, final ServiceEnvironment serviceEnvironment
     ) throws CommandException {
         Manager manager;
         try {
-            manager = Manager.init(username, dataPath, serviceEnvironment, BaseConfig.USER_AGENT);
+            manager = Manager.init(username, settingsPath, serviceEnvironment, BaseConfig.USER_AGENT);
         } catch (NotRegisteredException e) {
             throw new UserErrorException("User " + username + " is not registered.");
         } catch (Throwable e) {

@@ -10,4 +10,5 @@ public interface SignalCreator {
     ProvisioningManager getNewProvisioningManager();
 
     RegistrationManager getNewRegistrationManager(String username) throws IOException;
+
 }

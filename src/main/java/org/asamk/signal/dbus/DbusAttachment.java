@@ -82,7 +82,7 @@ other stuff :
   private int               keyLength; //TODO: if you're going to do that, probably should have previewLength and digestLength
 
 notes :
-"size" appears to be the same as "length" but is int rather than long 
+"size" appears to be the same as "length" but is int rather than long
 "length" represents file size (or stream/attachment size)
 "preview" is also known as "thumbnail"
 

@@ -1,7 +1,7 @@
 package org.asamk;
 
-import org.asamk.SignalControl;
 import org.asamk.Signal.Error;
+import org.asamk.signal.DbusConfig;
 import org.asamk.signal.commands.exceptions.IOErrorException;
 import org.asamk.signal.commands.exceptions.UnexpectedErrorException;
 import org.asamk.signal.commands.exceptions.UserErrorException;
@@ -192,27 +192,14 @@ public interface Signal extends DBusInterface {
 
     String getObjectPath();
 
-    String link() throws Error.Failure;
-
-    String link(String newDeviceName) throws Error.Failure;
-
     void addDevice(String uri) throws Error.Failure;
 
     void removeDevice(int deviceId) throws Error.Failure;
 
-    void register(
-            String number, boolean voiceVerification
-    ) throws Error.Failure, Error.InvalidNumber, SignalControl.Error.RequiresCaptcha;
-
-    void registerWithCaptcha(
-            final String number, final boolean voiceVerification, final String captcha
-    ) throws Error.Failure, Error.InvalidNumber, SignalControl.Error.RequiresCaptcha;
+    void unlisten(boolean keepData) throws Error.Failure;
 
     void unregister() throws Error.Failure;
-
-    void verify(String number, String verificationCode) throws Error.Failure, Error.InvalidNumber;
-
-    void verifyWithPin(String number, String verificationCode, String pin) throws Error.Failure, Error.InvalidNumber;
+    void unregister(boolean keepData) throws Error.Failure;
 
     List<String> listNumbers();
 

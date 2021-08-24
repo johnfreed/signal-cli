@@ -424,8 +424,24 @@ registerWithCaptcha(number<s>, voiceVerification<b>, captcha<s>) -> <>::
 Exceptions: Failure, InvalidNumber, RequiresCaptcha
 
 unregister() -> <>::
+unregister(keepData<b>) -> <>::
 
-Unregisters the current device from the Signal server and kills the daemon.
+Unregisters the current device from the Signal server and stops listening to DBus.
+* keepData  : true or omitted = keep files in data directory; false = delete files
+
+Exception: Failure
+
+listen(number<s>) -> <>::
+* number            : Phone number
+Adds a number to those listening to DBus.
+
+Exceptions: Failure, InvalidNumber
+
+unlisten() -> <>::
+unlisten(keepData<b>) -> <>::
+
+Stops the current device from listening to DBus.
+* keepData  : true or omitted = keep files in data directory; false = delete files
 
 Exception: Failure
 
