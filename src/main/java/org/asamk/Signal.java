@@ -106,10 +106,12 @@ public interface Signal extends DBusInterface {
     List<String> getBase64GroupIds();
     List<String> getGroupIds(String dummy);
 
-    String getGroupName(byte[] groupId) throws Error.GroupNotFound, Error.Failure;
+    String getGroupName(byte[] groupId);
+    String getGroupName(byte[] groupId, boolean useExceptions) throws Error.GroupNotFound, Error.Failure;
     String getGroupName(String base64GroupId) throws Error.GroupNotFound, Error.Failure;
 
-    List<String> getGroupMembers(byte[] groupId) throws Error.GroupNotFound, Error.Failure;
+    List<String> getGroupMembers(byte[] groupId);
+    List<String> getGroupMembers(byte[] groupId, boolean useExceptions) throws Error.GroupNotFound, Error.Failure;
     List<String> getGroupMembers(String base64GroupId) throws Error.GroupNotFound, Error.Failure;
 
     List<String> getGroupAdminMembers(byte[] groupId) throws Error.GroupNotFound, Error.Failure;
@@ -217,10 +219,12 @@ public interface Signal extends DBusInterface {
 
     boolean isContactBlocked(final String number) throws Error.InvalidNumber;
 
-    boolean isGroupBlocked(final byte[] groupId)  throws Error.GroupNotFound, Error.Failure;
+    boolean isGroupBlocked(final byte[] groupId);
+    boolean isGroupBlocked(final byte[] groupId, boolean useExceptions)  throws Error.GroupNotFound, Error.Failure;
     boolean isGroupBlocked(final String base64GroupId)  throws Error.GroupNotFound, Error.Failure;
 
-    boolean isMember(final byte[] groupId) throws Error.GroupNotFound, Error.Failure;
+    boolean isMember(final byte[] groupId);
+    boolean isMember(final byte[] groupId, boolean useExceptions) throws Error.GroupNotFound, Error.Failure;
     boolean isMember(final String base64GroupId) throws Error.GroupNotFound, Error.Failure;
     List<String> isMember(final byte[] groupId, List<String>members, boolean setMemberStatus) throws Error.GroupNotFound, Error.Failure;
     List<String> isMember(final String base64GroupId, List<String>members, boolean setMemberStatus) throws Error.GroupNotFound, Error.Failure;

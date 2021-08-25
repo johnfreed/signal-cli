@@ -604,13 +604,20 @@ public class DbusSignalImpl implements Signal {
 
     @Override
     public String getGroupName(final byte[] groupId) {
+        return (getGroupName(groupId, false));
+    }
+
+    @Override
+    public String getGroupName(final byte[] groupId, boolean useExceptions) {
         GroupInfo group = null;
         try {
             group = m.getGroup(GroupId.unknownVersion(groupId));
         } catch (AssertionError e) {
+            if (!useExceptions) {return "";}
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
+              if (!useExceptions) {return "";}
             throw new Error.GroupNotFound("Error finding group");
         } else {
             return group.getTitle();
@@ -619,13 +626,20 @@ public class DbusSignalImpl implements Signal {
 
     @Override
     public List<String> getGroupMembers(final byte[] groupId) {
+        return getGroupMembers(groupId, false);
+    }
+
+    @Override
+    public List<String> getGroupMembers(final byte[] groupId, boolean useExceptions) {
         GroupInfo group = null;
         try {
             group = m.getGroup(GroupId.unknownVersion(groupId));
         } catch (AssertionError e) {
+              if (!useExceptions) {return List.of();}
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
+            if (!useExceptions) {return List.of();}
             throw new Error.GroupNotFound("Error finding group");
         } else {
             return group.getMembers()
@@ -1382,13 +1396,20 @@ public class DbusSignalImpl implements Signal {
 
     @Override
     public boolean isGroupBlocked(final byte[] groupId) {
+        return isGroupBlocked(groupId, false);
+    }
+
+    @Override
+    public boolean isGroupBlocked(final byte[] groupId, boolean useExceptions) {
         GroupInfo group = null;
         try {
             group = m.getGroup(GroupId.unknownVersion(groupId));
         } catch (AssertionError e) {
+            if (!useExceptions) {return false;}
             throw new Error.Failure(e.getMessage());
         }
         if (group == null) {
+            if (!useExceptions) {return false;}
             throw new Error.GroupNotFound("Error finding group");
         } else {
             return group.isBlocked();
@@ -1418,13 +1439,20 @@ public class DbusSignalImpl implements Signal {
 
     @Override
     public boolean isMember(final byte[] groupId) {
+        return isMember(groupId, false);
+    }
+
+    @Override
+    public boolean isMember(final byte[] groupId, boolean useExceptions) {
         GroupInfo group = null;
         try {
             group = m.getGroup(GroupId.unknownVersion(groupId));
         } catch (AssertionError e) {
+            if (!useExceptions) {return false;}
             throw new Error.Failure(e.getMessage());
         }
         if (group == null) {
+            if (!useExceptions) {return false;}
             throw new Error.GroupNotFound("Error finding group");
         } else {
             return group.isMember(m.getSelfRecipientId());

@@ -119,14 +119,14 @@ sendGroupMessage(message<s>, attachments<as>, base64GroupId<s>) -> timestamp<x>:
 * attachments   : String array of filenames or URLs to send as attachments
 * groupId       : Byte array representing the internal group identifier
 * base64GroupId : String representing the internal group identifier in Base64 format
-* timestamp     : Can be used to identify the corresponding signal reply
+* timestamp     : Long, can be used to identify the corresponding Signal reply
 
 Exceptions: GroupNotFound, Failure, AttachmentInvalid
 
 sendNoteToSelfMessage(message<s>, attachments<as>) -> timestamp<x>::
 * message     : Text to send (can be UTF8)
 * attachments : String array of filenames or URLs to send as attachments
-* timestamp   : Can be used to identify the corresponding signal reply
+* timestamp   : Long, can be used to identify the corresponding Signal reply
 
 Exceptions: Failure, AttachmentInvalid
 
@@ -136,7 +136,7 @@ sendMessage(message<s>, attachments<as>, recipients<as>) -> timestamp<x>::
 * attachments : String array of filenames or URLs to send as attachments
 * recipient   : Phone number of a single recipient represented as string
 * recipients  : String array of phone numbers
-* timestamp   : Can be used to identify the corresponding signal reply
+* timestamp   : Long, can be used to identify the corresponding Signal reply
 
 Depending on the type of the recipient field this sends a message to one or multiple recipients.
 
@@ -150,7 +150,7 @@ sendGroupMessageReaction(emoji<s>, remove<b>, targetAuthor<s>, targetSentTimesta
 * targetSentTimestamp : Long representing timestamp of the message to which to react
 * groupId             : Byte array with base64 encoded group identifier
 * base64GroupId       : String representing the internal group identifier in Base64 format
-* timestamp           : Long, can be used to identify the corresponding signal reply
+* timestamp           : Long, can be used to identify the corresponding Signal reply
 
 Exceptions: Failure, InvalidNumber, GroupNotFound
 
@@ -162,7 +162,7 @@ sendMessageReaction(emoji<s>, remove<b>, targetAuthor<s>, targetSentTimestamp<x>
 * targetSentTimestamp : Long representing timestamp of the message to which to react
 * recipient           : String with the phone number of a single recipient
 * recipients          : Array of strings with phone numbers, should there be more recipients
-* timestamp           : Long, can be used to identify the corresponding signal reply
+* timestamp           : Long, can be used to identify the corresponding Signal reply
 
 Depending on the type of the recipient(s) field this sends a reaction to one or multiple recipients.
 
@@ -173,7 +173,7 @@ sendGroupRemoteDeleteMessage(targetSentTimestamp<x>, base64GroupId<s>) -> timest
 * targetSentTimestamp : Long representing timestamp of the message to delete
 * groupId             : Byte array representing the internal group identifier
 * base64GroupId       : String representing the internal group identifier in Base64 format
-* timestamp           : Long, can be used to identify the corresponding signal reply
+* timestamp           : Long, can be used to identify the corresponding Signal reply
 
 Exceptions: Failure, GroupNotFound
 
@@ -252,24 +252,28 @@ Exceptions: None
 
 getGroupName(groupId<ay>) -> groupName<s>::
 getGroupName(base64GroupId<s>) -> groupName<s>::
-groupName     : The display name of the group
-groupId       : Byte array representing the internal group identifier
-base64GroupId : String representing the internal group identifier in Base64 format
+getGroupName(groupId<ay>, useExceptions<b>) -> groupName<s>::
+* groupName       : The display name of the group
+* groupId         : Byte array representing the internal group identifier
+* base64GroupId   : String representing the internal group identifier in Base64 format
+* useExceptions   : true = raise exceptions; false = return empty string on error (default false)
 
-Exception: Failure if base64GroupId or groupId is malformed; GroupNotFound
+Exceptions (if useExceptions is true or base64GroupId is given): Failure if base64GroupId or groupId is malformed; GroupNotFound
 
 isMember(groupId<ay>) -> active<b>::
 isMember(base64GroupId<s>) -> active<b>::
 isMember(groupId<ay>, members<as>, setMemberStatus<b>) -> memberList<as>::
 isMember(base64GroupId<s>, members<as>, setMemberStatus<b>) -> memberList<as>::
+isMember(groupId<ay>, useExceptions<b>) -> active<b>::
 * groupId         : Byte array representing the internal group identifier
 * base64GroupId   : String representing the internal group identifier in Base64 format
 * members         : Phone numbers of users to add to or remove from group
 * setMemberStatus : true for add to group members; false for remove from group members
 * active          : Boolean representing whether you are a member of the group
 * memberList      : List of members after command execution
+* useExceptions   : true = raise exceptions; false = return false on error (default false)
 
-Exceptions: GroupNotFound, Failure
+Exceptions (if useExceptions is true or base64GroupId is given): GroupNotFound, Failure
 
 isAdmin(groupId<ay>) -> admin<b>::
 isAdmin(base64GroupId<s>) -> admin<b>::
@@ -286,11 +290,13 @@ Exceptions: GroupNotFound, Failure
 
 getGroupMembers(groupId<ay>) -> members<as>::
 getGroupMembers(base64GroupId<s>) -> members<as>::
+getGroupMembers(groupId<ay>, useExceptions<b>) -> members<as>::
 * members       : String array with the phone numbers of all active members of a group
 * groupId       : Byte array representing the internal group identifier
 * base64GroupId : String representing the internal group identifier in Base64 format
+* useExceptions : true = raise exceptions; false = return empty array on error (default false)
 
-Exception: Failure if base64GroupId or groupId is malformed; GroupNotFound
+Exceptions (if useExceptions is true or base64GroupId is given): Failure if base64GroupId or groupId is malformed; GroupNotFound
 
 getGroupAdminMembers(groupId<ay>) -> adminMembers<as>::
 getGroupAdminMembers(base64GroupId<s>) -> adminMembers<as>::
@@ -347,11 +353,13 @@ Exception: InvalidNumber for an incorrectly formatted phone number. For unknown 
 
 isGroupBlocked(groupId<ay>) -> state<b>::
 isGroupBlocked(base64GroupId<s>) -> state<b>::
+isGroupBlocked(groupId<ay>, useExceptions<b>) -> state<b>::
 * groupId       : Byte array representing the internal group identifier
 * base64GroupId : String representing the internal group identifier in Base64 format
 * state         : true=blocked, false=not blocked
+* useExceptions : true = raise exceptions; false = return false on error (default false)
 
-Exceptions: Failure if base64GroupId or groupId is malformed; GroupNotFound
+Exceptions (if useExceptions is true or base64GroupId is given): Failure if base64GroupId or groupId is malformed; GroupNotFound
 
 isRegistered(number<s>) -> result<b>::
 isRegistered(numbers<as>) -> results<ab>::
