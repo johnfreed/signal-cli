@@ -6,6 +6,7 @@ import net.sourceforge.argparse4j.inf.ArgumentParser;
 import net.sourceforge.argparse4j.inf.Namespace;
 
 import org.asamk.Signal;
+import org.asamk.Signal.Error;
 import org.asamk.signal.commands.Command;
 import org.asamk.signal.commands.Commands;
 import org.asamk.signal.commands.DbusCommand;
@@ -20,6 +21,7 @@ import org.asamk.signal.commands.exceptions.UnexpectedErrorException;
 import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.manager.Manager;
 import org.asamk.signal.manager.NotRegisteredException;
+import org.asamk.signal.manager.PathConfig;
 import org.asamk.signal.manager.ProvisioningManager;
 import org.asamk.signal.manager.RegistrationManager;
 import org.asamk.signal.manager.config.ServiceConfig;
@@ -33,6 +35,7 @@ import org.whispersystems.signalservice.api.util.PhoneNumberFormatter;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.channels.OverlappingFileLockException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -116,12 +119,12 @@ public class App {
             return;
         }
 
-        final File dataPath;
+        final File settingsPath;
         var config = ns.getString("config");
         if (config != null) {
-            dataPath = new File(config);
+            settingsPath = new File(config);
         } else {
-            dataPath = getDefaultDataPath();
+            settingsPath = getDefaultDataPath();
         }
 
         final var serviceEnvironmentCli = ns.<ServiceEnvironmentCli>get("service-environment");
@@ -143,23 +146,24 @@ public class App {
                 throw new UserErrorException("You cannot specify a username (phone number) when linking");
             }
 
-            handleProvisioningCommand((ProvisioningCommand) command, dataPath, serviceEnvironment);
+            handleProvisioningCommand((ProvisioningCommand) command, settingsPath, serviceEnvironment);
             return;
         }
 
         if (command instanceof MultiLocalCommand) {
             List<String> usernames = new ArrayList<>();
             if (username == null) {
-                usernames = Manager.getAllLocalUsernames(dataPath);
-                handleMultiLocalCommand((MultiLocalCommand) command, dataPath, serviceEnvironment, usernames);
+                //anonymous mode
+                handleMultiLocalCommand((MultiLocalCommand) command, settingsPath, serviceEnvironment, usernames);
             } else {
-                handleMultiLocalCommand((MultiLocalCommand) command, dataPath, serviceEnvironment, username);
+                //single-user mode
+                handleMultiLocalCommand((MultiLocalCommand) command, settingsPath, serviceEnvironment, username);
             }
             return;
         }
 
         if (username == null) {
-            var usernames = Manager.getAllLocalUsernames(dataPath);
+            var usernames = Manager.getAllLocalUsernames(settingsPath);
             if (usernames.size() == 0) {
                 throw new UserErrorException("No local users found, you first need to register or link an account");
             } else if (usernames.size() > 1) {
@@ -173,7 +177,7 @@ public class App {
         }
 
         if (command instanceof RegistrationCommand) {
-            handleRegistrationCommand((RegistrationCommand) command, username, dataPath, serviceEnvironment);
+            handleRegistrationCommand((RegistrationCommand) command, username, settingsPath, serviceEnvironment);
             return;
         }
 
@@ -181,25 +185,25 @@ public class App {
             throw new UserErrorException("Command only works via dbus");
         }
 
-        handleLocalCommand((LocalCommand) command, username, dataPath, serviceEnvironment);
+        handleLocalCommand((LocalCommand) command, username, settingsPath, serviceEnvironment);
     }
 
     private void handleProvisioningCommand(
-            final ProvisioningCommand command, final File dataPath, final ServiceEnvironment serviceEnvironment
+            final ProvisioningCommand command, final File settingsPath, final ServiceEnvironment serviceEnvironment
     ) throws CommandException {
-        var pm = ProvisioningManager.init(dataPath, serviceEnvironment, BaseConfig.USER_AGENT);
+        var pm = ProvisioningManager.init(settingsPath, serviceEnvironment, BaseConfig.USER_AGENT);
         command.handleCommand(ns, pm);
     }
 
     private void handleRegistrationCommand(
             final RegistrationCommand command,
             final String username,
-            final File dataPath,
+            final File settingsPath,
             final ServiceEnvironment serviceEnvironment
     ) throws CommandException {
         final RegistrationManager manager;
         try {
-            manager = RegistrationManager.init(username, dataPath, serviceEnvironment, BaseConfig.USER_AGENT);
+            manager = RegistrationManager.init(username, settingsPath, serviceEnvironment, BaseConfig.USER_AGENT);
         } catch (Throwable e) {
             throw new UnexpectedErrorException("Error loading or creating state file: "
                     + e.getMessage()
@@ -217,10 +221,10 @@ public class App {
     private void handleLocalCommand(
             final LocalCommand command,
             final String username,
-            final File dataPath,
+            final File settingsPath,
             final ServiceEnvironment serviceEnvironment
     ) throws CommandException {
-        Manager m = loadManager(username, dataPath, serviceEnvironment);
+        Manager m = loadManager(username, settingsPath, serviceEnvironment);
         command.handleCommand(ns, m);
         try {
             m.close();;
@@ -231,32 +235,34 @@ public class App {
 
     private void handleMultiLocalCommand(
             final MultiLocalCommand command,
-            final File dataPath,
+            final File settingsPath,
             final ServiceEnvironment serviceEnvironment,
             final List<String> usernames
     ) throws CommandException {
         SignalCreator c = new SignalCreator() {
 
             @Override
+            public File getSettingsPath() {
+                return settingsPath;
+            }
+
+            @Override
+            public ServiceEnvironment getServiceEnvironment() {
+                return serviceEnvironment;
+            }
+
+            @Override
             public ProvisioningManager getNewProvisioningManager() {
-                return ProvisioningManager.init(dataPath, serviceEnvironment, BaseConfig.USER_AGENT);
+                return ProvisioningManager.init(settingsPath, serviceEnvironment, BaseConfig.USER_AGENT);
             }
 
             @Override
             public RegistrationManager getNewRegistrationManager(String username) throws IOException {
-                return RegistrationManager.init(username, dataPath, serviceEnvironment, BaseConfig.USER_AGENT);
+                return RegistrationManager.init(username, settingsPath, serviceEnvironment, BaseConfig.USER_AGENT);
             }
         };
 
         final var managers = new ArrayList<Manager>();
-        for (String u : usernames) {
-            try {
-                managers.add(loadManager(u, dataPath, serviceEnvironment));
-            } catch (CommandException e) {
-                logger.warn("Ignoring {}: {}", u, e.getMessage());
-            }
-
-        }
         command.handleCommand(ns, managers, c);
 
         for (var m : managers) {
@@ -270,7 +276,7 @@ public class App {
 
     private void handleMultiLocalCommand(
             final MultiLocalCommand command,
-            final File dataPath,
+            final File settingsPath,
             final ServiceEnvironment serviceEnvironment,
             final String username
     ) throws CommandException {
@@ -278,20 +284,30 @@ public class App {
         SignalCreator c = new SignalCreator() {
 
             @Override
+            public File getSettingsPath() {
+                return settingsPath;
+            }
+
+            @Override
+            public ServiceEnvironment getServiceEnvironment() {
+                return serviceEnvironment;
+            }
+
+            @Override
             public ProvisioningManager getNewProvisioningManager() {
-                return ProvisioningManager.init(dataPath, serviceEnvironment, BaseConfig.USER_AGENT);
+                return ProvisioningManager.init(settingsPath, serviceEnvironment, BaseConfig.USER_AGENT);
             }
 
             @Override
             public RegistrationManager getNewRegistrationManager(String username) throws IOException {
-                return RegistrationManager.init(username, dataPath, serviceEnvironment, BaseConfig.USER_AGENT);
+                return RegistrationManager.init(username, settingsPath, serviceEnvironment, BaseConfig.USER_AGENT);
             }
 
         };
 
         Manager manager = null;
         try {
-            manager = loadManager(username, dataPath, serviceEnvironment);
+            manager = loadManager(username, settingsPath, serviceEnvironment);
         } catch (CommandException e) {
             logger.warn("Ignoring {}: {}", username, e.getMessage());
         }
@@ -305,7 +321,7 @@ public class App {
         }
     }
 
-    private Manager loadManager(
+    public static Manager loadManager(
             final String username, final File settingsPath, final ServiceEnvironment serviceEnvironment
     ) throws CommandException {
         Manager manager;
@@ -313,6 +329,8 @@ public class App {
             manager = Manager.init(username, settingsPath, serviceEnvironment, BaseConfig.USER_AGENT);
         } catch (NotRegisteredException e) {
             throw new UserErrorException("User " + username + " is not registered.");
+        } catch (OverlappingFileLockException e) {
+            throw new UserErrorException("User " + username + " is already listening.");
         } catch (Throwable e) {
             logger.debug("Loading state file failed", e);
             throw new UnexpectedErrorException("Error loading state file for user "

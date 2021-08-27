@@ -1248,25 +1248,30 @@ public class DbusSignalImpl implements Signal {
     }
 
     @Override
+    public void unlisten() {
+    	unlisten(true);
+    }
+
+    @Override
     public void unlisten(boolean keepData) {
-        try {
-            if (!keepData) {
-                removeUserData(m.getUsername());
-            }
-            String objectPath = DbusConfig.getObjectPath(m.getUsername());
-            DBusConnection.DBusBusType busType = getDbusType(this);
-            var conn = DBusConnection.getConnection(busType);
-            conn.unExportObject(objectPath);
-            m.close();
-            logger.info("unExported dbus object: " + objectPath);
-        } catch (IOException | DBusException e) {
-            throw new Error.Failure(e.getClass().getSimpleName() + " Unlisten error: " + e.getMessage());
-        }
+    	try {
+    		if (!keepData) {
+    			removeUserData(m.getUsername());
+    		}
+    		String objectPath = DbusConfig.getObjectPath(m.getUsername());
+    		DBusConnection.DBusBusType busType = getDbusType(this);
+    		var conn = DBusConnection.getConnection(busType);
+    		conn.unExportObject(objectPath);
+    		m.close();
+    		logger.info("unExported dbus object: " + objectPath);
+    	} catch (IOException | DBusException e) {
+    		throw new Error.Failure(e.getClass().getSimpleName() + " Unlisten error: " + e.getMessage());
+    	}
     }
 
     @Override
     public void unregister() {
-        unregister(true);
+    	unregister(true);
     }
 
     @Override
@@ -1678,3 +1683,4 @@ public class DbusSignalImpl implements Signal {
         return busType;
     }
 }
+

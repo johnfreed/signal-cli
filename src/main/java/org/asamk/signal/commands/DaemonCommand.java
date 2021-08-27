@@ -15,11 +15,13 @@ import org.asamk.signal.PlainTextWriter;
 import org.asamk.signal.commands.SignalCreator;
 import org.asamk.signal.commands.exceptions.CommandException;
 import org.asamk.signal.commands.exceptions.IOErrorException;
+import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.commands.exceptions.UnexpectedErrorException;
 import org.asamk.signal.dbus.DbusSignalControlImpl;
 import org.asamk.signal.dbus.DbusSignalImpl;
 import org.asamk.signal.manager.Manager;
 import org.asamk.signal.manager.PathConfig;
+import org.asamk.signal.manager.config.ServiceEnvironment;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusException;
 import org.slf4j.Logger;
@@ -39,6 +41,7 @@ public class DaemonCommand implements MultiLocalCommand {
 
     private final static Logger logger = LoggerFactory.getLogger(DaemonCommand.class);
     private static OutputWriter outputWriter;
+    public static DBusConnection.DBusBusType dBusType;
 
     public static void attachToSubparser(final Subparser subparser) {
         subparser.help("Run in daemon mode and provide an experimental dbus interface.");
@@ -66,39 +69,41 @@ public class DaemonCommand implements MultiLocalCommand {
         return Set.of(OutputType.PLAIN_TEXT, OutputType.JSON);
     }
 
+
     @Override
-    public void handleCommand(
-            final Namespace ns, final Manager manager, SignalCreator c
-    ) throws CommandException {
+    public void handleCommand(final Namespace ns, final Manager m, final SignalCreator c) throws CommandException {
         //single-user mode
         boolean ignoreAttachments = ns.getBoolean("ignore-attachments");
+
         DBusConnection.DBusBusType busType;
         if (ns.getBoolean("system")) {
             busType = DBusConnection.DBusBusType.SYSTEM;
         } else {
             busType = DBusConnection.DBusBusType.SESSION;
         }
+        dBusType = busType;
 
         try (var conn = DBusConnection.getConnection(busType)) {
-            final var signalControl = new DbusSignalControlImpl(c, m -> {
-                try {
-                    final var objectPath = DbusConfig.getObjectPath();
-                    return run(conn, objectPath, m, ignoreAttachments);
-                } catch (DBusException e) {
-                    logger.error("Failed to export object", e);
-                    return null;
-                }
-            }, DbusConfig.getObjectPath());
-
-            signalControl.addManager(manager);
-
+            var objectPath = DbusConfig.getObjectPath();
+            var t = run(conn, objectPath, m, ignoreAttachments);
             conn.requestBusName(DbusConfig.getBusname());
+            try {
+                t.join();
+            } catch (InterruptedException ignored) {
+            }
 
-            signalControl.run();
-        } catch (DBusException | IOException e) {
+        } catch (DBusException e) {
             logger.error("Dbus command failed", e);
-            throw new UnexpectedErrorException("Dbus command failed");
+            throw new UserErrorException("Dbus command failed, daemon already started on this bus.");
+        } catch (IOException e) {
+            logger.error("Dbus command failed", e);
+            throw new IOErrorException("Dbus command failed");
         }
+    }
+
+    @Override
+    public void handleCommand(final Namespace ns, final Manager m) throws CommandException {
+        handleCommand(ns, m, null);
     }
 
     @Override
@@ -107,13 +112,13 @@ public class DaemonCommand implements MultiLocalCommand {
     ) throws CommandException {
         //anonymous mode
         boolean ignoreAttachments = ns.getBoolean("ignore-attachments");
-
         DBusConnection.DBusBusType busType;
         if (ns.getBoolean("system")) {
             busType = DBusConnection.DBusBusType.SYSTEM;
         } else {
             busType = DBusConnection.DBusBusType.SESSION;
         }
+        dBusType = busType;
 
         try (var conn = DBusConnection.getConnection(busType)) {
             final var signalControl = new DbusSignalControlImpl(c, m -> {
@@ -127,34 +132,37 @@ public class DaemonCommand implements MultiLocalCommand {
             }, DbusConfig.getObjectPath());
             conn.exportObject(signalControl);
 
-            //when the App gets a MultiLocalCommand (i.e., a daemon command),
-            //it by default loads a manager for all local usernames
-            //so we need to pare that back here if only some names were listed
             List<String> daemonUsernames = ns.<String>getList("number");
+            File settingsPath = c.getSettingsPath();
+            ServiceEnvironment serviceEnvironment = c.getServiceEnvironment();
+
             if (daemonUsernames == null) {
-                daemonUsernames = List.of();
-            }
-            for (var m : managers) {
-                String u = m.getUsername();
                 //--number option was not given, so add all local usernames to signalControl
-                if (daemonUsernames.size() == 0) {
-                    signalControl.addManager(m);
-                } else {
-                    //one or more numbers were specified by --number option
-                    if (daemonUsernames.contains(u)) {
-                        //add listed managers to signalControl
-                        signalControl.addManager(m);
-                    } else {
-                        //close managers not listed (can be added later by listen())
-                        m.close();
-                    }
+                daemonUsernames = Manager.getAllLocalUsernames(settingsPath);
+            }
+
+            //legitimate to call daemon --number with no numbers
+            for (String u : daemonUsernames) {
+                try {
+                    managers.add(App.loadManager(u, settingsPath, serviceEnvironment));
+                } catch (CommandException e) {
+                    logger.warn("Ignoring {}: {}", u, e.getMessage());
                 }
             }
 
+            for (var m : managers) {
+                signalControl.addManager(m);
+            }
+
+
             conn.requestBusName(DbusConfig.getBusname());
+            logger.info("Starting daemon.");
 
             signalControl.run();
-        } catch (DBusException | IOException e) {
+        } catch (DBusException e) {
+            logger.error("Dbus command failed", e);
+            throw new UserErrorException("Dbus command failed, daemon already started on this bus.");
+        } catch (IOException e ) {
             logger.error("Dbus command failed", e);
             throw new UnexpectedErrorException("Dbus command failed");
         }

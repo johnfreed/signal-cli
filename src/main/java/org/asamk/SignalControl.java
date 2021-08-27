@@ -2,6 +2,7 @@ package org.asamk;
 
 import org.asamk.Signal.Error;
 import org.freedesktop.dbus.DBusPath;
+import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusExecutionException;
 import org.freedesktop.dbus.interfaces.DBusInterface;
 
@@ -18,6 +19,9 @@ public interface SignalControl extends DBusInterface {
     String link() throws SCError.Failure;
 
     String link(String newDeviceName) throws SCError.Failure;
+
+    void linkAndDisplay(String command) throws SCError.Failure;
+    void linkAndDisplay(String command, String newDeviceName) throws SCError.Failure;
 
     void register(
             String number, boolean voiceVerification

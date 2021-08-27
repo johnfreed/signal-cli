@@ -12,8 +12,4 @@ public interface MultiLocalCommand extends LocalCommand {
     void handleCommand(Namespace ns, List<Manager> m, final SignalCreator c) throws CommandException;
     void handleCommand(Namespace ns, Manager m, final SignalCreator c) throws CommandException;
 
-    @Override
-    default void handleCommand(final Namespace ns, final Manager m) throws CommandException {
-        handleCommand(ns, List.of(m), null);
-    }
 }

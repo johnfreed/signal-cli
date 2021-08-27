@@ -198,6 +198,7 @@ public interface Signal extends DBusInterface {
 
     void removeDevice(int deviceId) throws Error.Failure;
 
+    void unlisten() throws Error.Failure;
     void unlisten(boolean keepData) throws Error.Failure;
 
     void unregister() throws Error.Failure;

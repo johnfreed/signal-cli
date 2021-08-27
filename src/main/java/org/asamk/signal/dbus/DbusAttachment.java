@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
 
+import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.manager.util.Utils;
 import org.freedesktop.dbus.Struct;
 
@@ -136,7 +137,7 @@ from SignalServiceAttachmentRemoteId.java :
         }
     }
 
-    public DbusAttachment(String fileName) {
+    public DbusAttachment(String fileName) throws UserErrorException {
         this.contentType = "application/octet-stream";
         try {
             final File file = new File(fileName);
@@ -149,7 +150,7 @@ from SignalServiceAttachmentRemoteId.java :
                 this.contentType = aURL.openConnection().getContentType();
                 this.size = aURL.openConnection().getContentLengthLong();
             } catch (IOException f) {
-                f.printStackTrace();
+                throw new UserErrorException("Cannot find attachment " + fileName + ". " + f.getMessage());
             }
         }
         this.fileName = fileName;

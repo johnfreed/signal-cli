@@ -19,6 +19,7 @@ import org.asamk.signal.commands.exceptions.IOErrorException;
 import org.asamk.signal.commands.exceptions.UnexpectedErrorException;
 import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.dbus.DbusSignalImpl;
+import org.asamk.signal.dbus.StreamGobbler;
 import org.asamk.signal.manager.AttachmentInvalidException;
 import org.asamk.signal.manager.AvatarStore;
 import org.asamk.signal.manager.Manager;
@@ -68,10 +69,17 @@ import org.whispersystems.signalservice.api.messages.SendMessageResult;
 
 import static org.asamk.signal.util.Util.getLegacyIdentifier;
 
+
+import java.io.InputStreamReader;
+import java.io.BufferedReader;
+import java.io.InputStream; 
+import java.util.function.Consumer;
+
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -84,6 +92,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
@@ -98,7 +108,7 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
     private static List<Pair<Manager, Thread>> receiveThreads = new ArrayList<>();
     private static Object stopTrigger = new Object();
     private static String objectPath;
-
+    private static DBusConnection.DBusBusType busType;
     public static RegistrationManager registrationManager;
     public static ProvisioningManager provisioningManager;
 
@@ -110,6 +120,7 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
         this.c = c;
         this.newManagerRunner = newManagerRunner;
         this.objectPath = objectPath;
+        this.busType = busType;
     }
 
     public static void addManager(Manager m) {
@@ -218,6 +229,37 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
     public String link() {
         return link("cli");
     }
+    
+    @Override
+    public void linkAndDisplay(final String command) {
+    	linkAndDisplay(command, null);
+    }
+
+    @Override
+    public void linkAndDisplay(String command, String newDeviceName) {
+    	try
+    	{
+    		if (newDeviceName == null) {newDeviceName = "cli";}
+    		String tscode = link(newDeviceName);
+    		tscode = "\"" + tscode + "\"";
+           	boolean isWindows = System.getProperty("os.name")
+        			.toLowerCase().startsWith("windows");
+           	command = command.replaceAll("\\{\\}", tscode);
+        	ProcessBuilder builder = new ProcessBuilder();
+        	if (isWindows) {
+        	    builder.command("cmd.exe", "/c", command);
+        	} else {
+        	    builder.command("sh", "-c", command);
+        	}
+        	builder.directory(new File(System.getProperty("user.home")));
+        	Process process = builder.start();
+        	StreamGobbler streamGobbler = 
+        	  new StreamGobbler(process.getInputStream(), System.out::println);
+        	Executors.newSingleThreadExecutor().submit(streamGobbler);
+    	} catch (IOException e) {
+    		throw new SCError.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
+    	}
+    }
 
     @Override
     public String link(final String newDeviceName) {
@@ -246,35 +288,29 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
             throw new SCError.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
         }
     }
-
-
+    
+    @Override
     public String version() {
         return BaseConfig.PROJECT_VERSION;
     }
 
+    
     @Override
     public void listen(String number) {
         try {
-            //make sure user is registered
-            List<Manager> mList = listManagers();
 
-            //we know at least one manager exists, so get settings info from it
-            Manager mgr = listManagers().get(0);
-            PathConfig pathConfig = mgr.getPathConfig();
-            File settingsPath = new File(pathConfig.getDataPath().getParent());
-            List<String> usernames = mgr.getAllLocalUsernames(settingsPath);
+            File settingsPath = c.getSettingsPath();
+            List<String> usernames = Manager.getAllLocalUsernames(settingsPath);
             if (!usernames.contains(number)) {
                 throw new Error.Failure("Listen: " + number + " is not registered.");
             }
             String objectPath = DbusConfig.getObjectPath(number);
-            DBusInterface iface = new org.asamk.signal.dbus.DbusSignalImpl(mgr, objectPath);
-            DBusConnection.DBusBusType busType = DbusSignalImpl.getDbusType(iface);
+            DBusConnection.DBusBusType busType = DaemonCommand.dBusType;
 
-            //seems to be no way to test for service environment
-            ServiceEnvironment serviceEnvironment = ServiceEnvironment.LIVE;
+            ServiceEnvironment serviceEnvironment = c.getServiceEnvironment();
 
             //create new manager for this number
-            final Manager m = loadManager(number, settingsPath, serviceEnvironment);
+            final Manager m = App.loadManager(number, settingsPath, serviceEnvironment);
             this.addManager(m);
 
             final var thread = new Thread(() -> {
@@ -299,6 +335,9 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
                     throw new Error.Failure(e.getClass().getSimpleName() + " Listen error: " + e.getMessage());
                 }
             });
+        } catch (OverlappingFileLockException e) {
+            logger.warn("Ignoring {}: {}", number, e.getMessage());
+            throw new Error.Failure(e.getClass().getSimpleName() + " Already listening: " + e.getMessage());
         } catch (CommandException e) {
             logger.warn("Ignoring {}: {}", number, e.getMessage());
             throw new Error.Failure(e.getClass().getSimpleName() + " Listen error: " + e.getMessage());
@@ -313,34 +352,6 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
         }
     }
 
-    private Manager loadManager(
-            final String username, final File settingsPath, final ServiceEnvironment serviceEnvironment
-    ) throws CommandException {
-        Manager manager;
-        try {
-            manager = Manager.init(username, settingsPath, serviceEnvironment, BaseConfig.USER_AGENT);
-        } catch (NotRegisteredException e) {
-            throw new UserErrorException("User " + username + " is not registered.");
-        } catch (Throwable e) {
-            logger.debug("Loading state file failed", e);
-            throw new UnexpectedErrorException("Error loading state file for user "
-                    + username
-                    + ": "
-                    + e.getMessage()
-                    + " ("
-                    + e.getClass().getSimpleName()
-                    + ")");
-        }
-
-        try {
-            manager.checkAccountState();
-        } catch (IOException e) {
-            throw new UnexpectedErrorException("Error while checking account " + username + ": " + e.getMessage());
-        }
-
-        return manager;
-    }
-
     @Override
     public List<DBusPath> listAccounts() {
         synchronized (receiveThreads) {
@@ -350,5 +361,21 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
                     .map(u -> new DBusPath(DbusConfig.getObjectPath(u)))
                     .collect(Collectors.toList());
         }
+    }
+}
+
+class StreamGobbler implements Runnable {
+    private InputStream inputStream;
+    private Consumer<String> consumer;
+
+    public StreamGobbler(InputStream inputStream, Consumer<String> consumer) {
+        this.inputStream = inputStream;
+        this.consumer = consumer;
+    }
+
+    @Override
+    public void run() {
+        new BufferedReader(new InputStreamReader(inputStream)).lines()
+          .forEach(consumer);
     }
 }
