@@ -3,8 +3,13 @@
 ## [Unreleased]
 ### Breaking changes
 - Removed deprecated `--json` parameter, use `--output=json` instead
+- Json output format of `listGroups` command changed:
+  Members are now arrays of `{"number":"...","uuid":"..."}` instead of arrays of strings.
 - Removed deprecated fallback data paths, only `$XDG_DATA_HOME/signal-cli` is used now
   For those still using the old paths (`$HOME/.config/signal`, `$HOME/.config/textsecure`) you need to move those to the new location.
+
+### Added
+- New global parameter `--trust-new-identities=always` to allow trusting any new identity key without verification
 
 ## [0.8.5] - 2021-08-07
 ### Added

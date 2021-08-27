@@ -148,14 +148,13 @@ getGroupMembers(groupId<ay>) -> members<as>::
 
 Exceptions: None; returns empty array if group is not found. Use isGroupFound to test.
 
+getGroupMembers(groupId<ay>) -> members<as>::
 getGroupMembers(base64GroupId<s>) -> members<as>::
-getGroupMembers(groupId<ay>, useExceptions<b>) -> members<as>::
 * members       : String array with the phone numbers of all active members of a group
 * groupId       : Byte array representing the internal group identifier
 * base64GroupId : String representing the internal group identifier in Base64 format
-* useExceptions : true = raise exceptions; false = do not raise exceptions
 
-Exceptions: Failure if base64GroupId or groupId is malformed; GroupNotFound
+Exceptions: InvalidGroupId, GroupNotFound
 
 getGroupName(groupId<ay>) -> groupName<s>::
 * groupName       : The display name of the group
@@ -164,13 +163,12 @@ getGroupName(groupId<ay>) -> groupName<s>::
 Exceptions: None; returns empty string if group is not found. Use isGroupFound to test.
 
 getGroupName(base64GroupId<s>) -> groupName<s>::
-getGroupName(groupId<ay>, useExceptions<b>) -> groupName<s>::
+getGroupName(groupId<ay>) -> groupName<s>::
 * groupName       : The display name of the group
 * groupId         : Byte array representing the internal group identifier
 * base64GroupId   : String representing the internal group identifier in Base64 format
-* useExceptions   : true = raise exceptions; false = do not raise exceptions
 
-Exceptions: Failure if base64GroupId or groupId is malformed; GroupNotFound
+Exceptions: InvalidGroupId, GroupNotFound
 
 getGroupPendingMembers(groupId<ay>) -> pendingMembers<as>::
 getGroupPendingMembers(base64GroupId<s>) -> pendingMembers<as>::
@@ -208,37 +206,28 @@ isGroupBlocked(groupId<ay>) -> state<b>::
 Exceptions: None; returns false if group is not found. Use isGroupFound to test.
 
 isGroupBlocked(base64GroupId<s>) -> state<b>::
-isGroupBlocked(groupId<ay>, useExceptions<b>) -> state<b>::
+isGroupBlocked(groupId<ay>) -> state<b>::
 * groupId       : Byte array representing the internal group identifier
 * base64GroupId : String representing the internal group identifier in Base64 format
 * state         : true=blocked, false=not blocked
-* useExceptions : true = raise exceptions; false = do not raise exceptions
 
-Exceptions: Failure if base64GroupId or groupId is malformed; GroupNotFound
-
-isGroupFound(groupId<ay>) -> isFound<b>::
-* groupId  : Byte array representing the internal group identifier
-* isFound  : true = group found; false = group not found
-
-Exceptions: None
+Exceptions: InvalidGroupId, GroupNotFound
 
 isMember(groupId<ay>) -> active<b>::
+isMember(base64GroupId<s>) -> active<b>::
 * groupId         : Byte array representing the internal group identifier
 * active          : Boolean representing whether you are a member of the group
 
-Exceptions: None; returns false if group is not found. Use isGroupFound to test.
+Exceptions: InvalidGroupId
 
 isMember(base64GroupId<s>, members<as>, setMemberStatus<b>) -> memberList<as>::
 isMember(groupId<ay>, members<as>, setMemberStatus<b>) -> memberList<as>::
-isMember(base64GroupId<s>) -> active<b>::
-isMember(groupId<ay>, useExceptions<b>) -> active<b>::
 * groupId         : Byte array representing the internal group identifier
 * base64GroupId   : String representing the internal group identifier in Base64 format
 * members         : Phone numbers of users to add to or remove from group
 * setMemberStatus : true for add to group members; false for remove from group members
 * active          : Boolean representing whether you are a member of the group
 * memberList      : List of members after command execution
-* useExceptions   : true = raise exceptions; false = do not raise exceptions
 
 Exceptions: GroupNotFound, Failure
 

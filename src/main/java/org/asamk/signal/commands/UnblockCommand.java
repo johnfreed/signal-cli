@@ -5,51 +5,55 @@ import net.sourceforge.argparse4j.inf.Subparser;
 
 import org.asamk.signal.OutputWriter;
 import org.asamk.signal.commands.exceptions.CommandException;
+import org.asamk.signal.commands.exceptions.UnexpectedErrorException;
 import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.manager.Manager;
 import org.asamk.signal.manager.NotMasterDeviceException;
-import org.asamk.signal.manager.groups.GroupIdFormatException;
 import org.asamk.signal.manager.groups.GroupNotFoundException;
-import org.asamk.signal.util.Util;
+import org.asamk.signal.util.CommandUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.whispersystems.signalservice.api.util.InvalidNumberException;
+
+import java.io.IOException;
 
 public class UnblockCommand implements JsonRpcLocalCommand {
 
     private final static Logger logger = LoggerFactory.getLogger(UnblockCommand.class);
 
-    public UnblockCommand(final OutputWriter outputWriter) {
+    @Override
+    public String getName() {
+        return "unblock";
     }
 
-    public static void attachToSubparser(final Subparser subparser) {
+    @Override
+    public void attachToSubparser(final Subparser subparser) {
         subparser.help("Unblock the given contacts or groups (messages will be received again)");
-        subparser.addArgument("contact").help("Contact number").nargs("*");
+        subparser.addArgument("recipient").help("Contact number").nargs("*");
         subparser.addArgument("-g", "--group-id", "--group").help("Group ID").nargs("*");
     }
 
     @Override
-    public void handleCommand(final Namespace ns, final Manager m) throws CommandException {
-        for (var contactNumber : ns.<String>getList("contact")) {
+    public void handleCommand(
+            final Namespace ns, final Manager m, final OutputWriter outputWriter
+    ) throws CommandException {
+        for (var contactNumber : CommandUtil.getSingleRecipientIdentifiers(ns.getList("recipient"), m.getUsername())) {
             try {
                 m.setContactBlocked(contactNumber, false);
-            } catch (InvalidNumberException e) {
-                logger.warn("Invalid number: {}", contactNumber);
             } catch (NotMasterDeviceException e) {
                 throw new UserErrorException("This command doesn't work on linked devices.");
+            } catch (IOException e) {
+                throw new UnexpectedErrorException("Failed to sync unblock to linked devices: " + e.getMessage());
             }
         }
 
-        if (ns.<String>getList("group-id") != null) {
-            for (var groupIdString : ns.<String>getList("group-id")) {
-                try {
-                    var groupId = Util.decodeGroupId(groupIdString);
-                    m.setGroupBlocked(groupId, false);
-                } catch (GroupIdFormatException e) {
-                    logger.warn("Invalid group id: {}", groupIdString);
-                } catch (GroupNotFoundException e) {
-                    logger.warn("Unknown group id: {}", groupIdString);
-                }
+        final var groupIdStrings = ns.<String>getList("group-id");
+        for (var groupId : CommandUtil.getGroupIds(groupIdStrings)) {
+            try {
+                m.setGroupBlocked(groupId, false);
+            } catch (GroupNotFoundException e) {
+                logger.warn("Unknown group id: {}", groupId);
+            } catch (IOException e) {
+                throw new UnexpectedErrorException("Failed to sync unblock to linked devices: " + e.getMessage());
             }
         }
     }

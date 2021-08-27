@@ -11,33 +11,29 @@ import org.asamk.signal.commands.exceptions.CommandException;
 import org.asamk.signal.commands.exceptions.IOErrorException;
 import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.manager.Manager;
-import org.asamk.signal.manager.groups.GroupId;
-import org.asamk.signal.manager.groups.GroupIdFormatException;
 import org.asamk.signal.manager.groups.GroupNotFoundException;
 import org.asamk.signal.manager.groups.LastGroupAdminException;
 import org.asamk.signal.manager.groups.NotAGroupMemberException;
-import org.asamk.signal.util.Util;
+import org.asamk.signal.util.CommandUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.whispersystems.signalservice.api.util.InvalidNumberException;
 
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 import static org.asamk.signal.util.ErrorUtils.handleSendMessageResults;
 
 public class QuitGroupCommand implements JsonRpcLocalCommand {
 
     private final static Logger logger = LoggerFactory.getLogger(QuitGroupCommand.class);
-    private final OutputWriter outputWriter;
 
-    public QuitGroupCommand(final OutputWriter outputWriter) {
-        this.outputWriter = outputWriter;
+    @Override
+    public String getName() {
+        return "quitGroup";
     }
 
-    public static void attachToSubparser(final Subparser subparser) {
+    @Override
+    public void attachToSubparser(final Subparser subparser) {
         subparser.help("Send a quit group message to all group members and remove self from member list.");
         subparser.addArgument("-g", "--group-id", "--group").required(true).help("Specify the recipient group ID.");
         subparser.addArgument("--delete")
@@ -49,23 +45,19 @@ public class QuitGroupCommand implements JsonRpcLocalCommand {
     }
 
     @Override
-    public void handleCommand(final Namespace ns, final Manager m) throws CommandException {
-        final GroupId groupId;
-        try {
-            groupId = Util.decodeGroupId(ns.getString("group-id"));
-        } catch (GroupIdFormatException e) {
-            throw new UserErrorException("Invalid group id: " + e.getMessage());
-        }
+    public void handleCommand(
+            final Namespace ns, final Manager m, final OutputWriter outputWriter
+    ) throws CommandException {
+        final var groupId = CommandUtil.getGroupId(ns.getString("group-id"));
 
-        var groupAdmins = ns.<String>getList("admin");
+        var groupAdmins = CommandUtil.getSingleRecipientIdentifiers(ns.getList("admin"), m.getUsername());
 
         try {
             try {
-                final var results = m.sendQuitGroupMessage(groupId,
-                        groupAdmins == null ? Set.of() : new HashSet<>(groupAdmins));
-                final var timestamp = results.first();
-                outputResult(timestamp);
-                handleSendMessageResults(results.second());
+                final var results = m.quitGroup(groupId, groupAdmins);
+                final var timestamp = results.getTimestamp();
+                outputResult(outputWriter, timestamp);
+                handleSendMessageResults(results.getResults());
             } catch (NotAGroupMemberException e) {
                 logger.info("User is not a group member");
             }
@@ -77,14 +69,12 @@ public class QuitGroupCommand implements JsonRpcLocalCommand {
             throw new IOErrorException("Failed to send message: " + e.getMessage());
         } catch (GroupNotFoundException e) {
             throw new UserErrorException("Failed to send to group: " + e.getMessage());
-        } catch (InvalidNumberException e) {
-            throw new UserErrorException("Failed to parse admin number: " + e.getMessage());
         } catch (LastGroupAdminException e) {
             throw new UserErrorException("You need to specify a new admin with --admin: " + e.getMessage());
         }
     }
 
-    private void outputResult(final long timestamp) {
+    private void outputResult(final OutputWriter outputWriter, final long timestamp) {
         if (outputWriter instanceof PlainTextWriter) {
             final var writer = (PlainTextWriter) outputWriter;
             writer.println("{}", timestamp);

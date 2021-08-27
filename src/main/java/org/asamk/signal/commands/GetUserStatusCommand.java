@@ -12,32 +12,37 @@ import org.asamk.signal.manager.Manager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.whispersystems.signalservice.api.util.InvalidNumberException;
+import org.whispersystems.libsignal.util.Pair;
 
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class GetUserStatusCommand implements JsonRpcLocalCommand {
 
     private final static Logger logger = LoggerFactory.getLogger(GetUserStatusCommand.class);
-    private final OutputWriter outputWriter;
 
-    public static void attachToSubparser(final Subparser subparser) {
-        subparser.help("Check if the specified phone number/s have been registered");
-        subparser.addArgument("number").help("Phone number").nargs("+");
-    }
-
-    public GetUserStatusCommand(final OutputWriter outputWriter) {
-        this.outputWriter = outputWriter;
+    @Override
+    public String getName() {
+        return "getUserStatus";
     }
 
     @Override
-    public void handleCommand(final Namespace ns, final Manager m) throws CommandException {
+    public void attachToSubparser(final Subparser subparser) {
+        subparser.help("Check if the specified phone number/s have been registered");
+        subparser.addArgument("recipient").help("Phone number").nargs("+");
+    }
+
+    @Override
+    public void handleCommand(
+            final Namespace ns, final Manager m, final OutputWriter outputWriter
+    ) throws CommandException {
         // Get a map of registration statuses
         Map<String, Boolean> registered = null;
         try {
-            registered = m.areUsersRegistered(new HashSet<>(ns.getList("number")));
+            registered = m.areUsersRegistered(new HashSet<>(ns.getList("recipient")));
         } catch (IOException e) {
             logger.debug("Failed to check registered users", e);
             throw new IOErrorException("Unable to check if users are registered");
@@ -49,10 +54,11 @@ public class GetUserStatusCommand implements JsonRpcLocalCommand {
         if (outputWriter instanceof JsonWriter) {
             final var jsonWriter = (JsonWriter) outputWriter;
 
-            var jsonUserStatuses = registered.entrySet()
-                    .stream()
-                    .map(entry -> new JsonUserStatus(entry.getKey(), entry.getValue()))
-                    .collect(Collectors.toList());
+            var jsonUserStatuses = registered.entrySet().stream().map(entry -> {
+                final var number = entry.getValue().first();
+                final var uuid = entry.getValue().second();
+                return new JsonUserStatus(entry.getKey(), number, uuid == null ? null : uuid.toString(), uuid != null);
+            }).collect(Collectors.toList());
 
             jsonWriter.write(jsonUserStatuses);
         } else {
@@ -66,12 +72,18 @@ public class GetUserStatusCommand implements JsonRpcLocalCommand {
 
     private static final class JsonUserStatus {
 
-        public String name;
+        public final String recipient;
 
-        public boolean isRegistered;
+        public final String number;
 
-        public JsonUserStatus(String name, boolean isRegistered) {
-            this.name = name;
+        public final String uuid;
+
+        public final boolean isRegistered;
+
+        public JsonUserStatus(String recipient, String number, String uuid, boolean isRegistered) {
+            this.recipient = recipient;
+            this.number = number;
+            this.uuid = uuid;
             this.isRegistered = isRegistered;
         }
     }

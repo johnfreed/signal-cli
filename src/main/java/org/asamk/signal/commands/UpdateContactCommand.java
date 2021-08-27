@@ -9,38 +9,42 @@ import org.asamk.signal.commands.exceptions.IOErrorException;
 import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.manager.Manager;
 import org.asamk.signal.manager.NotMasterDeviceException;
-import org.whispersystems.signalservice.api.util.InvalidNumberException;
+import org.asamk.signal.util.CommandUtil;
 
 import java.io.IOException;
 
 public class UpdateContactCommand implements JsonRpcLocalCommand {
 
-    public UpdateContactCommand(final OutputWriter outputWriter) {
+    @Override
+    public String getName() {
+        return "updateContact";
     }
 
-    public static void attachToSubparser(final Subparser subparser) {
+    @Override
+    public void attachToSubparser(final Subparser subparser) {
         subparser.help("Update the details of a given contact");
-        subparser.addArgument("number").help("Contact number");
+        subparser.addArgument("recipient").help("Contact number");
         subparser.addArgument("-n", "--name").help("New contact name");
         subparser.addArgument("-e", "--expiration").type(int.class).help("Set expiration time of messages (seconds)");
     }
 
     @Override
-    public void handleCommand(final Namespace ns, final Manager m) throws CommandException {
-        var number = ns.getString("number");
+    public void handleCommand(
+            final Namespace ns, final Manager m, final OutputWriter outputWriter
+    ) throws CommandException {
+        var recipientString = ns.getString("recipient");
+        var recipient = CommandUtil.getSingleRecipientIdentifier(recipientString, m.getUsername());
 
         try {
             var expiration = ns.getInt("expiration");
             if (expiration != null) {
-                m.setExpirationTimer(number, expiration);
+                m.setExpirationTimer(recipient, expiration);
             }
 
             var name = ns.getString("name");
             if (name != null) {
-                m.setContactName(number, name);
+                m.setContactName(recipient, name);
             }
-        } catch (InvalidNumberException e) {
-            throw new UserErrorException("Invalid contact number: " + e.getMessage());
         } catch (IOException e) {
             throw new IOErrorException("Update contact error: " + e.getMessage());
         } catch (NotMasterDeviceException e) {

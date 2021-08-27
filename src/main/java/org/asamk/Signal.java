@@ -56,7 +56,7 @@ public interface Signal extends DBusInterface {
 
     long sendGroupRemoteDeleteMessage(
             long targetSentTimestamp, byte[] groupId
-    ) throws Error.Failure, Error.GroupNotFound;
+    ) throws Error.Failure, Error.GroupNotFound, Error.InvalidGroupId;
 
     long sendMessageReaction(
             String emoji, boolean remove, String targetAuthor, long targetSentTimestamp, String recipient
@@ -74,11 +74,11 @@ public interface Signal extends DBusInterface {
 
     long sendGroupMessage(
             String message, List<String> attachments, byte[] groupId
-    ) throws Error.GroupNotFound, Error.Failure, Error.AttachmentInvalid;
+    ) throws Error.GroupNotFound, Error.Failure, Error.AttachmentInvalid, Error.InvalidGroupId;
 
     long sendGroupMessageReaction(
             String emoji, boolean remove, String targetAuthor, long targetSentTimestamp, byte[] groupId
-    ) throws Error.GroupNotFound, Error.Failure, Error.InvalidNumber;
+    ) throws Error.GroupNotFound, Error.Failure, Error.InvalidNumber, Error.InvalidGroupId;
 
     void sendContacts() throws Error.Failure, Error.UntrustedIdentity;
 
@@ -126,9 +126,11 @@ public interface Signal extends DBusInterface {
     String getGroupInviteUri(byte[] groupId) throws Error.GroupNotFound, Error.Failure;
     String getGroupInviteUri(String base64GroupId) throws Error.GroupNotFound, Error.Failure;
 
+    boolean isGroupFound(byte[] groupId);
+
     byte[] updateGroup(
             byte[] groupId, String name, List<String> members, String avatar
-    ) throws Error.AttachmentInvalid, Error.Failure, Error.InvalidNumber, Error.GroupNotFound;
+    ) throws Error.AttachmentInvalid, Error.Failure, Error.InvalidNumber, Error.GroupNotFound, Error.InvalidGroupId;
 
     String updateGroup(
             String base64GroupId, String name, List<String> members, String avatar
@@ -214,7 +216,7 @@ public interface Signal extends DBusInterface {
 
     List<String> getContactNumber(final String name) throws Error.Failure;
 
-    void quitGroup(final byte[] groupId) throws Error.GroupNotFound, Error.Failure;
+    void quitGroup(final byte[] groupId) throws Error.GroupNotFound, Error.Failure, Error.InvalidGroupId;
 
     void quitGroup(final String base64GroupId) throws Error.GroupNotFound, Error.Failure;
 
@@ -235,7 +237,7 @@ public interface Signal extends DBusInterface {
     List<String> isAdmin(final byte[] groupId, List<String>admins, boolean setAdminStatus) throws Error.GroupNotFound, Error.Failure;
     List<String> isAdmin(final String base64GroupId, List<String>admins, boolean setAdminStatus) throws Error.GroupNotFound, Error.Failure;
 
-    void joinGroup(final String groupLink) throws Error.Failure;
+    byte[] joinGroup(final String groupLink) throws Error.Failure;
 
     String uploadStickerPack(String stickerPackPath) throws Error.Failure;
 
@@ -375,6 +377,13 @@ public interface Signal extends DBusInterface {
         class GroupNotFound extends DBusExecutionException {
 
             public GroupNotFound(final String message) {
+                super(message);
+            }
+        }
+
+        class InvalidGroupId extends DBusExecutionException {
+
+            public InvalidGroupId(final String message) {
                 super(message);
             }
         }

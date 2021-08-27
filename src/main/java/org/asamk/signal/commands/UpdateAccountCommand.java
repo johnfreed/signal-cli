@@ -12,15 +12,20 @@ import java.io.IOException;
 
 public class UpdateAccountCommand implements JsonRpcLocalCommand {
 
-    public UpdateAccountCommand(final OutputWriter outputWriter) {
-    }
-
-    public static void attachToSubparser(final Subparser subparser) {
-        subparser.help("Update the account attributes on the Signal server.");
+    @Override
+    public String getName() {
+        return "updateAccount";
     }
 
     @Override
-    public void handleCommand(final Namespace ns, final Manager m) throws CommandException {
+    public void attachToSubparser(final Subparser subparser) {
+        subparser.help("Update the account attributes on the signal server.");
+    }
+
+    @Override
+    public void handleCommand(
+            final Namespace ns, final Manager m, final OutputWriter outputWriter
+    ) throws CommandException {
         try {
             m.updateAccountAttributes();
         } catch (IOException e) {

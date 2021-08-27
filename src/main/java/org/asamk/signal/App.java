@@ -26,6 +26,7 @@ import org.asamk.signal.manager.ProvisioningManager;
 import org.asamk.signal.manager.RegistrationManager;
 import org.asamk.signal.manager.config.ServiceConfig;
 import org.asamk.signal.manager.config.ServiceEnvironment;
+import org.asamk.signal.manager.storage.identities.TrustNewIdentity;
 import org.asamk.signal.util.IOUtils;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusException;
@@ -71,13 +72,17 @@ public class App {
 
         parser.addArgument("-o", "--output")
                 .help("Choose to output in plain text or JSON")
-                .type(Arguments.enumStringType(OutputType.class))
-                .setDefault(OutputType.PLAIN_TEXT);
+                .type(Arguments.enumStringType(OutputType.class));
 
         parser.addArgument("--service-environment")
                 .help("Choose the server environment to use.")
                 .type(Arguments.enumStringType(ServiceEnvironmentCli.class))
                 .setDefault(ServiceEnvironmentCli.LIVE);
+
+        parser.addArgument("--trust-new-identities")
+                .help("Choose when to trust new identities.")
+                .type(Arguments.enumStringType(TrustNewIdentityCli.class))
+                .setDefault(TrustNewIdentityCli.ON_FIRST_USE);
 
         var subparsers = parser.addSubparsers().title("subcommands").dest("command");
 
@@ -94,19 +99,22 @@ public class App {
     }
 
     public void init() throws CommandException {
-        var outputType = ns.<OutputType>get("output");
-        var outputWriter = outputType == OutputType.JSON
-                ? new JsonWriterImpl(System.out)
-                : new PlainTextWriterImpl(System.out);
-
         var commandKey = ns.getString("command");
-        var command = Commands.getCommand(commandKey, outputWriter);
+        var command = Commands.getCommand(commandKey);
         if (command == null) {
             throw new UserErrorException("Command not implemented!");
         }
 
-        if (!command.getSupportedOutputTypes().contains(outputType)) {
-            throw new UserErrorException("Command doesn't support output type " + outputType.toString());
+        var outputTypeInput = ns.<OutputType>get("output");
+        var outputType = outputTypeInput == null
+                ? command.getSupportedOutputTypes().stream().findFirst().orElse(null)
+                : outputTypeInput;
+        var outputWriter = outputType == null
+                ? null
+                : outputType == OutputType.JSON ? new JsonWriterImpl(System.out) : new PlainTextWriterImpl(System.out);
+
+        if (outputWriter != null && !command.getSupportedOutputTypes().contains(outputType)) {
+            throw new UserErrorException("Command doesn't support output type " + outputType);
         }
 
         String username = ns.getString("username");
@@ -115,7 +123,7 @@ public class App {
         final var useDbusSystem = ns.getBoolean("dbus-system");
         if (useDbus || useDbusSystem) {
             // If username is null, it will connect to the default object path
-            initDbusClient(command, username, useDbusSystem);
+            initDbusClient(command, username, useDbusSystem, outputWriter);
             return;
         }
 
@@ -127,11 +135,6 @@ public class App {
             settingsPath = getDefaultDataPath();
         }
 
-        final var serviceEnvironmentCli = ns.<ServiceEnvironmentCli>get("service-environment");
-        ServiceEnvironment serviceEnvironment = serviceEnvironmentCli == ServiceEnvironmentCli.LIVE
-                ? ServiceEnvironment.LIVE
-                : ServiceEnvironment.SANDBOX;
-
         if (!ServiceConfig.getCapabilities().isGv2()) {
             logger.warn("WARNING: Support for new group V2 is disabled,"
                     + " because the required native library dependency is missing: libzkgroup");
@@ -140,6 +143,16 @@ public class App {
         if (!ServiceConfig.isSignalClientAvailable()) {
             throw new UserErrorException("Missing required native library dependency: libsignal-client");
         }
+
+        final var serviceEnvironmentCli = ns.<ServiceEnvironmentCli>get("service-environment");
+        final var serviceEnvironment = serviceEnvironmentCli == ServiceEnvironmentCli.LIVE
+                ? ServiceEnvironment.LIVE
+                : ServiceEnvironment.SANDBOX;
+
+        final var trustNewIdentityCli = ns.<TrustNewIdentityCli>get("trust-new-identities");
+        final var trustNewIdentity = trustNewIdentityCli == TrustNewIdentityCli.ON_FIRST_USE
+                ? TrustNewIdentity.ON_FIRST_USE
+                : trustNewIdentityCli == TrustNewIdentityCli.ALWAYS ? TrustNewIdentity.ALWAYS : TrustNewIdentity.NEVER;
 
         if (command instanceof ProvisioningCommand) {
             if (username != null) {
@@ -154,10 +167,10 @@ public class App {
             List<String> usernames = new ArrayList<>();
             if (username == null) {
                 //anonymous mode
-                handleMultiLocalCommand((MultiLocalCommand) command, settingsPath, serviceEnvironment, usernames);
+                handleMultiLocalCommand((MultiLocalCommand) command, settingsPath, serviceEnvironment, usernames, trustNewIdentity);
             } else {
                 //single-user mode
-                handleMultiLocalCommand((MultiLocalCommand) command, settingsPath, serviceEnvironment, username);
+                handleMultiLocalCommand((MultiLocalCommand) command, settingsPath, serviceEnvironment, username, trustNewIdentity);
             }
             return;
         }
@@ -185,14 +198,22 @@ public class App {
             throw new UserErrorException("Command only works via dbus");
         }
 
-        handleLocalCommand((LocalCommand) command, username, settingsPath, serviceEnvironment);
+        handleLocalCommand((LocalCommand) command,
+        		username,
+        		settingsPath,
+        		serviceEnvironment,
+                outputWriter,
+                trustNewIdentity);
     }
 
     private void handleProvisioningCommand(
-            final ProvisioningCommand command, final File settingsPath, final ServiceEnvironment serviceEnvironment
+            final ProvisioningCommand command,
+            final File settingsPath,
+            final ServiceEnvironment serviceEnvironment,
+            final OutputWriter outputWriter
     ) throws CommandException {
         var pm = ProvisioningManager.init(settingsPath, serviceEnvironment, BaseConfig.USER_AGENT);
-        command.handleCommand(ns, pm);
+        command.handleCommand(ns, pm, outputWriter);
     }
 
     private void handleRegistrationCommand(
@@ -222,12 +243,12 @@ public class App {
             final LocalCommand command,
             final String username,
             final File settingsPath,
-            final ServiceEnvironment serviceEnvironment
+            final ServiceEnvironment serviceEnvironment,
+            final TrustNewIdentity trustNewIdentity
     ) throws CommandException {
-        Manager m = loadManager(username, settingsPath, serviceEnvironment);
-        command.handleCommand(ns, m);
-        try {
-            m.close();;
+        try (var m = loadManager(username, dataPath, serviceEnvironment, trustNewIdentity)) {
+            command.handleCommand(ns, m, outputWriter);
+            m.close();
         } catch (IOException e) {
             logger.warn("Cleanup failed", e);
         }
@@ -237,7 +258,9 @@ public class App {
             final MultiLocalCommand command,
             final File settingsPath,
             final ServiceEnvironment serviceEnvironment,
-            final List<String> usernames
+            final List<String> usernames,
+            final OutputWriter outputWriter,
+            final TrustNewIdentity trustNewIdentity
     ) throws CommandException {
         SignalCreator c = new SignalCreator() {
 
@@ -322,11 +345,14 @@ public class App {
     }
 
     public static Manager loadManager(
-            final String username, final File settingsPath, final ServiceEnvironment serviceEnvironment
+            final String username,
+            final File settingsPath,
+            final ServiceEnvironment serviceEnvironment,
+            final TrustNewIdentity trustNewIdentity
     ) throws CommandException {
         Manager manager;
         try {
-            manager = Manager.init(username, settingsPath, serviceEnvironment, BaseConfig.USER_AGENT);
+            manager = Manager.init(username, settingsPath, serviceEnvironment, BaseConfig.USER_AGENT, trustNewIdentity);
         } catch (NotRegisteredException e) {
             throw new UserErrorException("User " + username + " is not registered.");
         } catch (OverlappingFileLockException e) {
@@ -352,7 +378,7 @@ public class App {
     }
 
     private void initDbusClient(
-            final Command command, final String username, final boolean systemBus
+            final Command command, final String username, final boolean systemBus, final OutputWriter outputWriter
     ) throws CommandException {
         try {
             DBusConnection.DBusBusType busType;
@@ -366,7 +392,7 @@ public class App {
                         DbusConfig.getObjectPath(username),
                         Signal.class);
 
-                handleCommand(command, ts, dBusConn);
+                handleCommand(command, ts, dBusConn, outputWriter);
             }
         } catch (DBusException | IOException e) {
             logger.error("Dbus client failed", e);
@@ -374,11 +400,13 @@ public class App {
         }
     }
 
-    private void handleCommand(Command command, Signal ts, DBusConnection dBusConn) throws CommandException {
+    private void handleCommand(
+            Command command, Signal ts, DBusConnection dBusConn, OutputWriter outputWriter
+    ) throws CommandException {
         if (command instanceof ExtendedDbusCommand) {
-            ((ExtendedDbusCommand) command).handleCommand(ns, ts, dBusConn);
+            ((ExtendedDbusCommand) command).handleCommand(ns, ts, dBusConn, outputWriter);
         } else if (command instanceof DbusCommand) {
-            ((DbusCommand) command).handleCommand(ns, ts);
+            ((DbusCommand) command).handleCommand(ns, ts, outputWriter);
         } else {
             throw new UserErrorException("Command is not yet implemented via dbus");
         }

@@ -14,17 +14,16 @@ import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.manager.AttachmentInvalidException;
 import org.asamk.signal.manager.Manager;
 import org.asamk.signal.manager.groups.GroupId;
-import org.asamk.signal.manager.groups.GroupIdFormatException;
 import org.asamk.signal.manager.groups.GroupLinkState;
 import org.asamk.signal.manager.groups.GroupNotFoundException;
 import org.asamk.signal.manager.groups.GroupPermission;
+import org.asamk.signal.manager.groups.GroupSendingNotAllowedException;
 import org.asamk.signal.manager.groups.NotAGroupMemberException;
+import org.asamk.signal.util.CommandUtil;
 import org.asamk.signal.util.ErrorUtils;
-import org.asamk.signal.util.Util;
 import org.freedesktop.dbus.exceptions.DBusExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.whispersystems.signalservice.api.util.InvalidNumberException;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,13 +34,14 @@ import java.util.List;
 public class UpdateGroupCommand implements DbusCommand, JsonRpcLocalCommand {
 
     private final static Logger logger = LoggerFactory.getLogger(UpdateGroupCommand.class);
-    private final OutputWriter outputWriter;
 
-    public UpdateGroupCommand(final OutputWriter outputWriter) {
-        this.outputWriter = outputWriter;
+    @Override
+    public String getName() {
+        return "updateGroup";
     }
 
-    public static void attachToSubparser(final Subparser subparser) {
+    @Override
+    public void attachToSubparser(final Subparser subparser) {
         subparser.help("Create or update a group.");
         subparser.addArgument("-g", "--group-id", "--group").help("Specify the group ID.");
         subparser.addArgument("-n", "--name").help("Specify the new group name.");
@@ -68,6 +68,9 @@ public class UpdateGroupCommand implements DbusCommand, JsonRpcLocalCommand {
                 .choices("every-member", "only-admins");
         subparser.addArgument("--set-permission-edit-details")
                 .help("Set permission to edit group details")
+                .choices("every-member", "only-admins");
+        subparser.addArgument("--set-permission-send-messages")
+                .help("Set permission to send messages")
                 .choices("every-member", "only-admins");
 
         subparser.addArgument("-e", "--expiration").type(int.class).help("Set expiration time of messages (seconds)");
@@ -107,38 +110,38 @@ public class UpdateGroupCommand implements DbusCommand, JsonRpcLocalCommand {
     }
 
     @Override
-    public void handleCommand(final Namespace ns, final Manager m) throws CommandException {
-        GroupId groupId = null;
+    public void handleCommand(
+            final Namespace ns, final Manager m, final OutputWriter outputWriter
+    ) throws CommandException {
         final var groupIdString = ns.getString("group-id");
-        if (groupIdString != null) {
-            try {
-                groupId = Util.decodeGroupId(groupIdString);
-            } catch (GroupIdFormatException e) {
-                throw new UserErrorException("Invalid group id: " + e.getMessage());
-            }
-        }
+        var groupId = CommandUtil.getGroupId(groupIdString);
+
+        final var localNumber = m.getUsername();
 
         var groupName = ns.getString("name");
         var groupDescription = ns.getString("description");
-        var groupMembers = ns.<String>getList("member");
-        var groupRemoveMembers = ns.<String>getList("remove-member");
-        var groupAdmins = ns.<String>getList("admin");
-        var groupRemoveAdmins = ns.<String>getList("remove-admin");
+        var groupMembers = CommandUtil.getSingleRecipientIdentifiers(ns.getList("member"), localNumber);
+        var groupRemoveMembers = CommandUtil.getSingleRecipientIdentifiers(ns.getList("remove-member"), localNumber);
+        var groupAdmins = CommandUtil.getSingleRecipientIdentifiers(ns.getList("admin"), localNumber);
+        var groupRemoveAdmins = CommandUtil.getSingleRecipientIdentifiers(ns.getList("remove-admin"), localNumber);
         var groupAvatar = ns.getString("avatar");
         var groupResetLink = ns.getBoolean("reset-link");
         var groupLinkState = getGroupLinkState(ns.getString("link"));
         var groupExpiration = ns.getInt("expiration");
         var groupAddMemberPermission = getGroupPermission(ns.getString("set-permission-add-member"));
         var groupEditDetailsPermission = getGroupPermission(ns.getString("set-permission-edit-details"));
+        var groupSendMessagesPermission = getGroupPermission(ns.getString("set-permission-send-messages"));
 
         try {
             boolean isNewGroup = false;
+            Long timestamp = null;
             if (groupId == null) {
                 isNewGroup = true;
                 var results = m.createGroup(groupName,
                         groupMembers,
                         groupAvatar == null ? null : new File(groupAvatar));
-                ErrorUtils.handleSendMessageResults(results.second());
+                timestamp = results.second().getTimestamp();
+                ErrorUtils.handleSendMessageResults(results.second().getResults());
                 groupId = results.first();
                 groupName = null;
                 groupMembers = null;
@@ -157,39 +160,29 @@ public class UpdateGroupCommand implements DbusCommand, JsonRpcLocalCommand {
                     groupAddMemberPermission,
                     groupEditDetailsPermission,
                     groupAvatar == null ? null : new File(groupAvatar),
-                    groupExpiration);
-            Long timestamp = null;
+                    groupExpiration,
+                    groupSendMessagesPermission == null
+                            ? null
+                            : groupSendMessagesPermission == GroupPermission.ONLY_ADMINS);
             if (results != null) {
-                timestamp = results.first();
-                ErrorUtils.handleSendMessageResults(results.second());
+                timestamp = results.getTimestamp();
+                ErrorUtils.handleSendMessageResults(results.getResults());
             }
-            outputResult(timestamp, isNewGroup ? groupId : null);
+            outputResult(outputWriter, timestamp, isNewGroup ? groupId : null);
         } catch (AttachmentInvalidException e) {
             throw new UserErrorException("Failed to add avatar attachment for group\": " + e.getMessage());
-        } catch (GroupNotFoundException e) {
-            logger.warn("Unknown group id: {}", groupIdString);
-        } catch (NotAGroupMemberException e) {
-            logger.warn("You're not a group member");
-        } catch (InvalidNumberException e) {
-            throw new UserErrorException("Failed to parse member number: " + e.getMessage());
+        } catch (GroupNotFoundException | NotAGroupMemberException | GroupSendingNotAllowedException e) {
+            throw new UserErrorException(e.getMessage());
         } catch (IOException e) {
             throw new UnexpectedErrorException("Failed to send message: " + e.getMessage());
         }
     }
 
     @Override
-    public void handleCommand(final Namespace ns, final Signal signal) throws CommandException {
-        byte[] groupId = null;
-        if (ns.getString("group-id") != null) {
-            try {
-                groupId = Util.decodeGroupId(ns.getString("group-id")).serialize();
-            } catch (GroupIdFormatException e) {
-                throw new UserErrorException("Invalid group id: " + e.getMessage());
-            }
-        }
-        if (groupId == null) {
-            groupId = new byte[0];
-        }
+    public void handleCommand(
+            final Namespace ns, final Signal signal, final OutputWriter outputWriter
+    ) throws CommandException {
+        var groupId = CommandUtil.getGroupId(ns.getString("group-id"));
 
         var groupName = ns.getString("name");
         if (groupName == null) {
@@ -207,9 +200,12 @@ public class UpdateGroupCommand implements DbusCommand, JsonRpcLocalCommand {
         }
 
         try {
-            var newGroupId = signal.updateGroup(groupId, groupName, groupMembers, groupAvatar);
-            if (groupId.length != newGroupId.length) {
-                outputResult(null, GroupId.unknownVersion(newGroupId));
+            var newGroupId = signal.updateGroup(groupId == null ? new byte[0] : groupId.serialize(),
+                    groupName,
+                    groupMembers,
+                    groupAvatar);
+            if (groupId == null) {
+                outputResult(outputWriter, null, GroupId.unknownVersion(newGroupId));
             }
         } catch (Signal.Error.AttachmentInvalid e) {
             throw new UserErrorException("Failed to add avatar attachment for group\": " + e.getMessage());
@@ -218,7 +214,7 @@ public class UpdateGroupCommand implements DbusCommand, JsonRpcLocalCommand {
         }
     }
 
-    private void outputResult(final Long timestamp, final GroupId groupId) {
+    private void outputResult(final OutputWriter outputWriter, final Long timestamp, final GroupId groupId) {
         if (outputWriter instanceof PlainTextWriter) {
             final var writer = (PlainTextWriter) outputWriter;
             if (groupId != null) {
