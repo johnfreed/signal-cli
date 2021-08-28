@@ -86,8 +86,7 @@ public interface Signal extends DBusInterface {
 
     void trust(String number, String safetyNumber) throws Error.Failure, Error.InvalidNumber;
 
-    void sendTyping(boolean typingAction, String base64GroupId, List<String>recipients) throws Error.Failure, Error.UntrustedIdentity, Error.GroupNotFound;
-    void sendTyping(boolean typingAction, byte[] groupId, List<String>recipients) throws Error.Failure, Error.UntrustedIdentity, Error.GroupNotFound;
+    void sendTyping(boolean typingAction, List<String> base64GroupIds, List<String> numbers) throws Error.Failure, Error.UntrustedIdentity, Error.GroupNotFound;
 
     String getContactName(String number) throws Error.InvalidNumber;
 
@@ -97,21 +96,24 @@ public interface Signal extends DBusInterface {
 
     void setContactBlocked(String number, boolean blocked) throws Error.InvalidNumber;
 
+    void setGroupAnnounceOnly(byte[] groupId, boolean isAnnouncementGroup) throws Error.GroupNotFound;
+    void setGroupAnnounceOnly(String base64GroupId, boolean isAnnouncementGroup) throws Error.GroupNotFound;
+    boolean isGroupAnnounceOnly(byte[] groupId) throws Error.GroupNotFound;
+    boolean isGroupAnnounceOnly(String base64GroupId) throws Error.GroupNotFound;
+
     void setGroupBlocked(byte[] groupId, boolean blocked) throws Error.GroupNotFound;
     void setGroupBlocked(String base64GroupId, boolean blocked) throws Error.GroupNotFound;
 
     List<byte[]> getGroupIds();
     // To get the group Ids in base 64 format, either use the getBaseGroupIds() method, or
     //   the getGroupIds(dummy) form, where dummy represents any string
-    List<String> getBase64GroupIds();
+    List<String> getGroupIdsBase64();
     List<String> getGroupIds(String dummy);
 
     String getGroupName(byte[] groupId);
-    String getGroupName(byte[] groupId, boolean useExceptions) throws Error.GroupNotFound, Error.Failure;
     String getGroupName(String base64GroupId) throws Error.GroupNotFound, Error.Failure;
 
     List<String> getGroupMembers(byte[] groupId);
-    List<String> getGroupMembers(byte[] groupId, boolean useExceptions) throws Error.GroupNotFound, Error.Failure;
     List<String> getGroupMembers(String base64GroupId) throws Error.GroupNotFound, Error.Failure;
 
     List<String> getGroupAdminMembers(byte[] groupId) throws Error.GroupNotFound, Error.Failure;
@@ -125,8 +127,6 @@ public interface Signal extends DBusInterface {
 
     String getGroupInviteUri(byte[] groupId) throws Error.GroupNotFound, Error.Failure;
     String getGroupInviteUri(String base64GroupId) throws Error.GroupNotFound, Error.Failure;
-
-    boolean isGroupFound(byte[] groupId);
 
     byte[] updateGroup(
             byte[] groupId, String name, List<String> members, String avatar
@@ -149,7 +149,8 @@ public interface Signal extends DBusInterface {
             String addMemberPermission,
             String editDetailsPermission,
             String avatar,
-            Integer expirationTimer
+            Integer expirationTimer,
+            Boolean isAnnouncementGroup
             ) throws Error.AttachmentInvalid, Error.Failure, Error.InvalidNumber, Error.GroupNotFound;
 
     String updateGroup(
@@ -165,7 +166,8 @@ public interface Signal extends DBusInterface {
             String addMemberPermission,
             String editDetailsPermission,
             String avatar,
-            Integer expirationTimer
+            Integer expirationTimer,
+            Boolean isAnnouncementGroup
             ) throws Error.AttachmentInvalid, Error.Failure, Error.InvalidNumber, Error.GroupNotFound;
 
     long sendGroupMessage(
@@ -223,19 +225,19 @@ public interface Signal extends DBusInterface {
     boolean isContactBlocked(final String number) throws Error.InvalidNumber;
 
     boolean isGroupBlocked(final byte[] groupId);
-    boolean isGroupBlocked(final byte[] groupId, boolean useExceptions)  throws Error.GroupNotFound, Error.Failure;
     boolean isGroupBlocked(final String base64GroupId)  throws Error.GroupNotFound, Error.Failure;
 
     boolean isMember(final byte[] groupId);
-    boolean isMember(final byte[] groupId, boolean useExceptions) throws Error.GroupNotFound, Error.Failure;
     boolean isMember(final String base64GroupId) throws Error.GroupNotFound, Error.Failure;
-    List<String> isMember(final byte[] groupId, List<String>members, boolean setMemberStatus) throws Error.GroupNotFound, Error.Failure;
-    List<String> isMember(final String base64GroupId, List<String>members, boolean setMemberStatus) throws Error.GroupNotFound, Error.Failure;
+
+    List<String> updateMembers(final byte[] groupId, List<String>members, boolean setMemberStatus) throws Error.GroupNotFound, Error.Failure;
+    List<String> updateMembers(final String base64GroupId, List<String>members, boolean setMemberStatus) throws Error.GroupNotFound, Error.Failure;
 
     boolean isAdmin(final byte[] groupId) throws Error.GroupNotFound, Error.Failure;
     boolean isAdmin(final String base64GroupId) throws Error.GroupNotFound, Error.Failure;
-    List<String> isAdmin(final byte[] groupId, List<String>admins, boolean setAdminStatus) throws Error.GroupNotFound, Error.Failure;
-    List<String> isAdmin(final String base64GroupId, List<String>admins, boolean setAdminStatus) throws Error.GroupNotFound, Error.Failure;
+
+    List<String> updateAdmins(final byte[] groupId, List<String>admins, boolean setAdminStatus) throws Error.GroupNotFound, Error.Failure;
+    List<String> updateAdmins(final String base64GroupId, List<String>admins, boolean setAdminStatus) throws Error.GroupNotFound, Error.Failure;
 
     byte[] joinGroup(final String groupLink) throws Error.Failure;
 

@@ -132,7 +132,7 @@ public class App {
         if (config != null) {
             settingsPath = new File(config);
         } else {
-            settingsPath = getDefaultDataPath();
+            settingsPath = getDefaultSettingsPath();
         }
 
         if (!ServiceConfig.getCapabilities().isGv2()) {
@@ -159,7 +159,7 @@ public class App {
                 throw new UserErrorException("You cannot specify a username (phone number) when linking");
             }
 
-            handleProvisioningCommand((ProvisioningCommand) command, settingsPath, serviceEnvironment);
+            handleProvisioningCommand((ProvisioningCommand) command, settingsPath, serviceEnvironment, outputWriter);
             return;
         }
 
@@ -167,10 +167,10 @@ public class App {
             List<String> usernames = new ArrayList<>();
             if (username == null) {
                 //anonymous mode
-                handleMultiLocalCommand((MultiLocalCommand) command, settingsPath, serviceEnvironment, usernames, trustNewIdentity);
+                handleMultiLocalCommand((MultiLocalCommand) command, settingsPath, serviceEnvironment, usernames, outputWriter, trustNewIdentity);
             } else {
                 //single-user mode
-                handleMultiLocalCommand((MultiLocalCommand) command, settingsPath, serviceEnvironment, username, trustNewIdentity);
+                handleMultiLocalCommand((MultiLocalCommand) command, settingsPath, serviceEnvironment, username, outputWriter, trustNewIdentity);
             }
             return;
         }
@@ -244,9 +244,10 @@ public class App {
             final String username,
             final File settingsPath,
             final ServiceEnvironment serviceEnvironment,
+            final OutputWriter outputWriter,
             final TrustNewIdentity trustNewIdentity
     ) throws CommandException {
-        try (var m = loadManager(username, dataPath, serviceEnvironment, trustNewIdentity)) {
+        try (var m = loadManager(username, settingsPath, serviceEnvironment, trustNewIdentity)) {
             command.handleCommand(ns, m, outputWriter);
             m.close();
         } catch (IOException e) {
@@ -286,7 +287,7 @@ public class App {
         };
 
         final var managers = new ArrayList<Manager>();
-        command.handleCommand(ns, managers, c);
+        command.handleCommand(ns, managers, c, outputWriter, trustNewIdentity);
 
         for (var m : managers) {
             try {
@@ -301,7 +302,9 @@ public class App {
             final MultiLocalCommand command,
             final File settingsPath,
             final ServiceEnvironment serviceEnvironment,
-            final String username
+            final String username,
+            final OutputWriter outputWriter,
+            final TrustNewIdentity trustNewIdentity
     ) throws CommandException {
 
         SignalCreator c = new SignalCreator() {
@@ -328,14 +331,14 @@ public class App {
 
         };
 
-        Manager manager = null;
+    	Manager manager = null;
         try {
-            manager = loadManager(username, settingsPath, serviceEnvironment);
+            manager = loadManager(username, settingsPath, serviceEnvironment, trustNewIdentity);
         } catch (CommandException e) {
             logger.warn("Ignoring {}: {}", username, e.getMessage());
         }
 
-        command.handleCommand(ns, manager, c);
+        command.handleCommand(ns, manager, c, outputWriter, trustNewIdentity);
 
         try {
             manager.close();
@@ -413,9 +416,9 @@ public class App {
     }
 
     /**
-     * @return the default data directory to be used by signal-cli.
+     * @return the default settings directory to be used by signal-cli.
      */
-    private static File getDefaultDataPath() {
+    private static File getDefaultSettingsPath() {
         return new File(IOUtils.getDataHomeDir(), "signal-cli");
     }
 }

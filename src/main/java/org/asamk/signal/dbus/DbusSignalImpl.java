@@ -1,5 +1,6 @@
 package org.asamk.signal.dbus;
 
+
 import org.asamk.Signal;
 import org.asamk.SignalControl;
 import org.asamk.Signal.Error;
@@ -9,6 +10,7 @@ import org.asamk.signal.DbusConfig;
 import org.asamk.signal.OutputWriter;
 import org.asamk.signal.PlainTextWriter;
 import org.asamk.signal.PlainTextWriterImpl;
+import org.asamk.signal.commands.DaemonCommand;
 import org.asamk.signal.commands.GetUserStatusCommand;
 import org.asamk.signal.commands.SignalCreator;
 import org.asamk.signal.commands.UpdateGroupCommand;
@@ -38,8 +40,10 @@ import org.asamk.signal.manager.groups.GroupPermission;
 import org.asamk.signal.manager.groups.GroupSendingNotAllowedException;
 import org.asamk.signal.manager.groups.LastGroupAdminException;
 import org.asamk.signal.manager.groups.NotAGroupMemberException;
+import org.asamk.signal.manager.helper.SendHelper;
 import org.asamk.signal.manager.storage.groups.GroupInfo;
 import org.asamk.signal.manager.storage.identities.IdentityInfo;
+import org.asamk.signal.util.CommandUtil;
 import org.asamk.signal.util.DateUtils;
 import org.asamk.signal.util.ErrorUtils;
 import org.asamk.signal.util.Hex;
@@ -79,6 +83,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -96,7 +101,6 @@ public class DbusSignalImpl implements Signal {
     private final Manager m;
     private final String objectPath;
     private final static Logger logger = LoggerFactory.getLogger(DbusSignalImpl.class);
-
 
     public DbusSignalImpl(final Manager m, final String objectPath) {
         this.m = m;
@@ -127,8 +131,9 @@ public class DbusSignalImpl implements Signal {
         List<IdentityInfo> identities;
         IdentityInfo theirId;
         try {
-            identities = m.getIdentities(number);
-        } catch (InvalidNumberException e) {
+        	RecipientIdentifier.Single recipient = CommandUtil.getSingleRecipientIdentifier(number, m.getUsername());
+        	identities = m.getIdentities(recipient);
+        } catch (UserErrorException e) {
             throw new Error.InvalidNumber("Invalid number: " + e.getMessage());
         }
         List<String> results = new ArrayList<String>();
@@ -394,8 +399,6 @@ public class DbusSignalImpl implements Signal {
     public void sendContacts() {
         try {
             m.sendContacts();
-        } catch (UntrustedIdentityException e) {
-            throw new Error.UntrustedIdentity("SendContacts error: " + e.getMessage());
         } catch (IOException e) {
             throw new Error.Failure("SendContacts error: " + e.getMessage());
         }
@@ -424,8 +427,9 @@ public class DbusSignalImpl implements Signal {
                 }
                 boolean res;
                 try {
-                    res = m.trustIdentityVerified(number, fingerprintBytes);
-                } catch (InvalidNumberException e) {
+                    RecipientIdentifier.Single recipient = CommandUtil.getSingleRecipientIdentifier(number, m.getUsername());
+                    res = m.trustIdentityVerified(recipient, fingerprintBytes);
+                } catch (UserErrorException e) {
                     throw new Error.Failure("Failed to parse recipient: " + e.getMessage());
                 }
                 if (!res) {
@@ -435,8 +439,9 @@ public class DbusSignalImpl implements Signal {
             } else if (safetyNumber.length() == 60) {
                 boolean res;
                 try {
-                    res = m.trustIdentityVerifiedSafetyNumber(number, safetyNumber);
-                } catch (InvalidNumberException e) {
+                    RecipientIdentifier.Single recipient = CommandUtil.getSingleRecipientIdentifier(number, m.getUsername());
+                    res = m.trustIdentityVerifiedSafetyNumber(recipient, safetyNumber);
+                } catch (UserErrorException e) {
                     throw new Error.InvalidNumber("Failed to parse recipient: " + e.getMessage());
                 }
                 if (!res) {
@@ -452,50 +457,38 @@ public class DbusSignalImpl implements Signal {
                     "You need to specify the fingerprint/safety number you have verified with -v SAFETY_NUMBER");
         }
     }
-
+    
     @Override
-    public void sendTyping(boolean typingAction, String base64GroupId, List<String>recipients) {
-        final var noRecipients = recipients == null || recipients.isEmpty();
-        final var noGroup = base64GroupId == null || base64GroupId.isEmpty();
-        if (noRecipients && noGroup) {
+    public void sendTyping(boolean typingAction, List<String> base64GroupIds, List<String>numbers) {
+        final boolean noNumbers = numbers == null || numbers.isEmpty();
+        final boolean noGroup = base64GroupIds == null || base64GroupIds.isEmpty();
+        if (noNumbers && noGroup) {
             throw new Error.Failure("No recipients given");
-        }
-        if (!noRecipients && !noGroup) {
-            throw new Error.Failure("You cannot specify recipients by phone number and groups at the same time");
         }
 
         final TypingAction action = typingAction ? TypingAction.START : TypingAction.STOP;
-
-        GroupId groupId = null;
-        if (!noGroup) {
-            try {
-                groupId = Util.decodeGroupId(base64GroupId);
-            } catch (GroupIdFormatException e) {
-                throw new Error.Failure("Invalid group id: " + e.getMessage());
-            }
-        }
+        final var timestamp = System.currentTimeMillis();
+        final var localNumber = m.getUsername();
+        Set<RecipientIdentifier> recipients = new HashSet<RecipientIdentifier>();
 
         try {
-            if (groupId != null) {
-                m.sendGroupTypingMessage(action, groupId);
-            } else {
-                m.sendTypingMessage(action, new HashSet<String>(recipients));
-            }
+        	if (!noGroup) {
+        		recipients.addAll(CommandUtil.getGroupIdentifiers(base64GroupIds));
+        	}
+
+        	if (!noNumbers) {
+        		recipients.addAll(CommandUtil.getSingleRecipientIdentifiers(numbers, localNumber));
+        	}
+        	m.sendTypingMessage(action, recipients);
         } catch (UntrustedIdentityException e) {
             throw new Error.UntrustedIdentity("Failed to send message: " + e.getMessage());
         } catch (IOException e) {
             throw new Error.Failure("Failed to send message: " + e.getMessage());
-        } catch (GroupNotFoundException | NotAGroupMemberException e) {
+        } catch (GroupNotFoundException | NotAGroupMemberException | GroupSendingNotAllowedException e) {
             throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
-        } catch (InvalidNumberException e) {
+        } catch (UserErrorException e) {
             throw new Error.Failure("Invalid number: " + e.getMessage());
         }
-    }
-
-    @Override
-    public void sendTyping(boolean typingAction, byte[] groupId, List<String>recipients) {
-        String base64GroupId = Base64.getEncoder().encodeToString(groupId);
-        sendTyping(typingAction, base64GroupId, recipients);
     }
 
     // Since contact names might be empty if not defined, also potentially return
@@ -517,11 +510,9 @@ public class DbusSignalImpl implements Signal {
     @Override
     public void setExpirationTimer(final String number, final int expiration) {
         try {
-            m.setExpirationTimer(number, expiration);
+            m.setExpirationTimer(getSingleRecipientIdentifier(number, m.getUsername()), expiration);
         } catch (IOException e) {
             throw new Error.Failure(e.getMessage());
-        } catch (InvalidNumberException e) {
-            throw new Error.InvalidNumber(e.getMessage());
         }
     }
 
@@ -545,7 +536,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         }
 
         try {
@@ -587,7 +578,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.getTitle();
         }
@@ -602,7 +593,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
-            throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.getMembers()
                     .stream()
@@ -615,7 +606,7 @@ public class DbusSignalImpl implements Signal {
     // To get the group Ids in base 64 format, either use the getBaseGroupIds() method, or
     //   the getGroupIds(dummy) form, where dummy represents any string
     @Override
-    public List<String> getBase64GroupIds() {
+    public List<String> getGroupIdsBase64() {
         var groups = m.getGroups();
         var ids = new ArrayList<String>(groups.size());
         for (var group : groups) {
@@ -651,7 +642,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.getTitle();
         }
@@ -672,7 +663,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
         if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+            throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.getMembers()
                     .stream()
@@ -707,7 +698,7 @@ public class DbusSignalImpl implements Signal {
                     throw new Error.Failure(e.getMessage());
                 }
                   if (group == null) {
-                      throw new Error.InvalidGroupId("Invalid group id.");
+                      throw new Error.InvalidGroupId("GroupId is null.");
                 }
 
                 final var results = m.updateGroup(getGroupId(groupId),
@@ -767,7 +758,8 @@ public class DbusSignalImpl implements Signal {
             String addMemberPermission,
             String editDetailsPermission,
             String avatar,
-            Integer expirationTimer
+            Integer expirationTimer,
+            Boolean isAnnouncementGroup
             ) {
         try {
             File avatarFile = null;
@@ -814,7 +806,7 @@ public class DbusSignalImpl implements Signal {
                              throw new Error.Failure(ae.getMessage());
                          }
                            if (group == null) {
-                               throw new Error.InvalidGroupId("Invalid group id.");
+                               throw new Error.InvalidGroupId("GroupId is null.");
                         }
 
                          AvatarStore.deleteGroupAvatar(group.getGroupId());
@@ -823,9 +815,12 @@ public class DbusSignalImpl implements Signal {
                      }
                  }
             }
+
+            String localNumber = m.getUsername();
+            final var memberIdentifiers = getSingleRecipientIdentifiers(addMembers, localNumber);
             if (groupId == null) {
-                final var results = m.createGroup(name, addMembers, avatar == null ? null : new File(avatar));
-                checkSendMessageResults(0, results.second());
+                final var results = m.createGroup(name, memberIdentifiers, avatar == null ? null : new File(avatar));
+                checkSendMessageResults(results.second().getTimestamp(), results.second().getResults());
                 return results.first().serialize();
             } else {
                 GroupInfo group = null;
@@ -834,34 +829,35 @@ public class DbusSignalImpl implements Signal {
                 } catch (AssertionError e) {
                     throw new Error.Failure(e.getMessage());
                 }
-                  if (group == null) {
-                      throw new Error.InvalidGroupId("Invalid group id.");
+                if (group == null) {
+                    throw new Error.InvalidGroupId("GroupId is null.");
                 }
 
-                final var results = m.updateGroup(group.getGroupId(),
+                final var results = m.updateGroup(getGroupId(groupId),
                         name,
                         description,
-                        addMembers,
-                        removeMembers,
-                        addAdmins,
-                        removeAdmins,
+                        getSingleRecipientIdentifiers(addMembers, localNumber),
+                        getSingleRecipientIdentifiers(removeMembers, localNumber),
+                        getSingleRecipientIdentifiers(addAdmins, localNumber),
+                        getSingleRecipientIdentifiers(removeAdmins, localNumber),
                         resetGroupLink,
                         groupLinkState == null ? null : UpdateGroupCommand.getGroupLinkState(groupLinkState),
                         addMemberPermission == null ? null : UpdateGroupCommand.getGroupPermission(addMemberPermission),
                         editDetailsPermission == null ? null : UpdateGroupCommand.getGroupPermission(editDetailsPermission),
                         avatarFile,
-                        expirationTimer
+                        expirationTimer,
+                        isAnnouncementGroup
                         );
                 if (results != null) {
-                    checkSendMessageResults(results.first(), results.second());
+                    checkSendMessageResults(results.getTimestamp(), results.getResults());
                 }
                 return groupId;
             }
-        } catch (UserErrorException | IOException e) {
+        } catch (IOException e) {
             throw new Error.Failure(e.getMessage());
-        } catch ( GroupNotFoundException | NotAGroupMemberException e) {
+        } catch (GroupNotFoundException | NotAGroupMemberException | GroupSendingNotAllowedException e) {
             throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
-        } catch (InvalidNumberException e) {
+        } catch (UserErrorException e) {
             throw new Error.InvalidNumber(e.getMessage());
         } catch (AttachmentInvalidException e) {
             throw new Error.AttachmentInvalid(e.getMessage());
@@ -882,7 +878,8 @@ public class DbusSignalImpl implements Signal {
             String addMemberPermission,
             String editDetailsPermission,
             String avatar,
-            Integer expirationTimer
+            Integer expirationTimer,
+            Boolean isAnnouncementGroup
             ) {
         byte[] groupId = null;
         if (!base64GroupId.isEmpty()) {
@@ -892,8 +889,7 @@ public class DbusSignalImpl implements Signal {
                 throw new Error.Failure("Invalid group id format: " + e.getMessage());
             }
         }
-        groupId = updateGroup(
-                groupId,
+        groupId = updateGroup(groupId,
                 name,
                 description,
                 addMembers,
@@ -905,7 +901,8 @@ public class DbusSignalImpl implements Signal {
                 addMemberPermission,
                 editDetailsPermission,
                 avatar,
-                expirationTimer
+                expirationTimer,
+                isAnnouncementGroup
                 );
         return Base64.getEncoder().encodeToString(groupId);
     }
@@ -920,7 +917,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         }
         groupInviteUri = group.getGroupInviteLink();
           if (groupInviteUri == null) {
@@ -938,7 +935,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure("Incorrect format: " + e.getMessage());
         }
           if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         }
         GroupInviteLinkUrl groupInviteUri = group.getGroupInviteLink();
         return groupInviteUri.getUrl();
@@ -953,7 +950,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.getPendingMembers()
                     .stream()
@@ -978,7 +975,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.getPendingMembers()
                     .stream()
@@ -997,7 +994,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.getRequestingMembers()
                     .stream()
@@ -1022,7 +1019,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.getRequestingMembers()
                     .stream()
@@ -1041,7 +1038,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.getAdminMembers()
                     .stream()
@@ -1066,7 +1063,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
           if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+              throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.getAdminMembers()
                     .stream()
@@ -1078,20 +1075,8 @@ public class DbusSignalImpl implements Signal {
 
     @Override
     public boolean isRegistered(String number) {
-        if (number.isEmpty()) {
-            return false;
-        }
-        try {
-            Map<String, Boolean> registered;
-            List<String> numbers = new ArrayList<String>();
-            numbers.add(number);
-            registered = m.areUsersRegistered(new HashSet<String>(numbers));
-            return registered.get(number);
-        } catch (IOException e) {
-            throw new Error.Failure(e.getMessage());
-        } catch (InvalidNumberException e) {
-            throw new Error.InvalidNumber(e.getMessage());
-        }
+    	List<Boolean> result = isRegistered(List.of(number));
+    	return result.get(0);
     }
 
     @Override
@@ -1101,17 +1086,18 @@ public class DbusSignalImpl implements Signal {
             return results;
         }
         try {
-            Map<String, Boolean> registered;
+        	Map<String, Pair<String, UUID>> registered;
             registered = m.areUsersRegistered(new HashSet<String>(numbers));
             for (String number : numbers) {
-                results.add(registered.get(number));
+                UUID uuid = registered.get(number).second();
+                results.add(uuid != null);
             }
-            return results;
         } catch (IOException e) {
             throw new Error.Failure(e.getMessage());
         } catch (InvalidNumberException e) {
             throw new Error.InvalidNumber(e.getMessage());
         }
+        return results;
     }
 
     @Override
@@ -1187,20 +1173,6 @@ public class DbusSignalImpl implements Signal {
     }
 
     @Override
-    public boolean isGroupFound(byte[] groupId) {
-    	GroupInfo group = null;
-    	try {
-    		group = m.getGroup(getGroupId(groupId));
-    	} catch (AssertionError e) {
-    		return false;
-    	}
-    	if (group == null) {
-    		return false;
-    	}
-    	return true;
-    }
-
-    @Override
     public void addDevice(String uri) {
         try {
             m.addDeviceLink(new URI(uri));
@@ -1232,7 +1204,7 @@ public class DbusSignalImpl implements Signal {
     			removeUserData(m.getUsername());
     		}
     		String objectPath = DbusConfig.getObjectPath(m.getUsername());
-    		DBusConnection.DBusBusType busType = getDbusType(this);
+    		DBusConnection.DBusBusType busType = DaemonCommand.dBusType;
     		var conn = DBusConnection.getConnection(busType);
     		conn.unExportObject(objectPath);
     		m.close();
@@ -1251,7 +1223,7 @@ public class DbusSignalImpl implements Signal {
     public void unregister(boolean keepData) {
         try {
             m.unregister();
-            DBusConnection.DBusBusType busType = getDbusType(this);
+            DBusConnection.DBusBusType busType = DaemonCommand.dBusType;
             unlisten(keepData);
        } catch (Exception e) {
             throw new Error.Failure(e.getClass().getSimpleName() + "Unregister error: " + e.getMessage());
@@ -1298,46 +1270,38 @@ public class DbusSignalImpl implements Signal {
 
     @Override
     public void quitGroup(final byte[] groupId) {
-        GroupInfo group = null;
+        GroupId group = null;
         try {
-            group = m.getGroup(getGroupId(groupId));
+            group = getGroupId(groupId);
         } catch (AssertionError e) {
             throw new Error.Failure(e.getMessage());
         }
-          if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+        if (group == null) {
+            throw new Error.InvalidGroupId("GroupId is null.");
         }
         try {
-            m.sendQuitGroupMessage(group.getGroupId(), Set.of());
+            m.quitGroup(group, Set.of());
         } catch (GroupNotFoundException | NotAGroupMemberException e) {
-            throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+            throw new Error.GroupNotFound(e.getMessage());
         } catch (IOException | LastGroupAdminException e) {
             throw new Error.Failure(e.getMessage());
-        } catch (InvalidNumberException e) {
-            throw new Error.InvalidNumber(e.getMessage());
+//        } catch (UserErrorException e) {
+//        	throw new Error.InvalidNumber(e.getMessage());
         }
     }
+    
 
     @Override
     public void quitGroup(final String base64GroupId) {
         byte [] groupId = null;
         try {
             groupId = GroupId.fromBase64(base64GroupId).serialize();
+            quitGroup(groupId);
         } catch (GroupIdFormatException e) {
             throw new Error.Failure("Incorrect format: " + e.getMessage());
         }
-        GroupInfo group = null;
-        try {
-            group = m.getGroup(getGroupId(groupId));
-        } catch (AssertionError e) {
-            throw new Error.Failure(e.getMessage());
-        }
-          if (group == null) {
-              throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
-        }
-        try {
-            m.sendQuitGroupMessage(group.getGroupId(), Set.of());
-
+    }
+            
     @Override
     public byte[] joinGroup(final String groupLink) {
         try {
@@ -1363,11 +1327,6 @@ public class DbusSignalImpl implements Signal {
 
     @Override
     public boolean isGroupBlocked(final byte[] groupId) {
-        return isGroupBlocked(groupId, false);
-    }
-
-    @Override
-    public boolean isGroupBlocked(final byte[] groupId) {
         GroupInfo group = null;
         try {
             group = m.getGroup(getGroupId(groupId));
@@ -1375,7 +1334,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
         if (group == null) {
-            throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+            throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.isBlocked();
         }
@@ -1396,7 +1355,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
         if (group == null) {
-            throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+            throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.isBlocked();
         }
@@ -1411,7 +1370,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
         if (group == null) {
-            throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+            throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.isMember(m.getSelfRecipientId());
         }
@@ -1432,51 +1391,56 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
         if (group == null) {
-            throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+            throw new Error.InvalidGroupId("GroupId is null.");
         } else {
             return group.isMember(m.getSelfRecipientId());
         }
     }
 
     @Override
-    public List<String> isMember(final byte[] groupId, List<String>members, boolean setMemberStatus) {
+    public List<String> updateMembers(final byte[] groupId, List<String>members, boolean addToMembers) {
         GroupInfo group = null;
         try {
             group = m.getGroup(getGroupId(groupId));
             if (group == null) {
-                throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+                throw new Error.InvalidGroupId("GroupId is null.");
             }
-            if (setMemberStatus) {
-                var results = m.updateGroup(group.getGroupId(),
-                        null,
-                        null,
-                        members,
-                        null,
-                        null,
-                        null,
-                        false,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null);
+            var localNumber = m.getUsername();
+            if (addToMembers) {
+            	var results = m.updateGroup(getGroupId(groupId),
+            			null,
+            			null,
+            			getSingleRecipientIdentifiers(members, localNumber),
+            			null,
+            			null,
+            			null,
+            			false,
+            			null,
+            			null,
+            			null,
+            			null,
+            			null,
+            			isGroupAnnounceOnly(groupId)
+            			);
             } else {
-                    var results = m.updateGroup(group.getGroupId(),
-                            null,
-                            null,
-                            null,
-                            members,
-                            null,
-                            null,
-                            false,
-                            null,
-                            null,
-                            null,
-                            null,
-                            null);
+            	var results = m.updateGroup(getGroupId(groupId),
+            			null,
+            			null,
+            			null,
+            			getSingleRecipientIdentifiers(members, localNumber),
+            			null,
+            			null,
+            			false,
+            			null,
+            			null,
+            			null,
+            			null,
+            			null,
+            			isGroupAnnounceOnly(groupId)
+            			);
             }
             return getGroupMembers(groupId);
-        } catch (NotAGroupMemberException | InvalidNumberException | AssertionError | IOException | AttachmentInvalidException e) {
+        } catch (NotAGroupMemberException | AssertionError | IOException | AttachmentInvalidException | GroupSendingNotAllowedException e) {
             throw new Error.Failure(e.getMessage());
         } catch (GroupNotFoundException e) {
             throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
@@ -1484,15 +1448,94 @@ public class DbusSignalImpl implements Signal {
     }
 
     @Override
-    public List<String> isMember(final String base64GroupId, List<String> members, boolean setMemberStatus) {
+    public List<String> updateMembers(final String base64GroupId, List<String> members, boolean addToMembers) {
         GroupInfo group = null;
         byte[] groupId = null;
         try {
             groupId = GroupId.fromBase64(base64GroupId).serialize();
-            return isMember(groupId, members, setMemberStatus);
+            return updateMembers(groupId, members, addToMembers);
         } catch (GroupIdFormatException e) {
             throw new Error.Failure("Incorrect format: " + e.getMessage());
         }
+    }
+
+    @Override
+    public void setGroupAnnounceOnly(byte[] groupId, boolean isAnnouncementGroup) {
+    	GroupInfo group = null;
+    	try {
+    		group = m.getGroup(getGroupId(groupId));
+    		if (group == null) {
+    			throw new Error.InvalidGroupId("GroupId is null.");
+    		}
+    		var results = m.updateGroup(getGroupId(groupId),
+    				null,
+    				null,
+    				null,
+    				null,
+    				null,
+    				null,
+    				false,
+    				null,
+    				null,
+    				null,
+    				null,
+    				null,
+    				isAnnouncementGroup
+    				);
+    	} catch (NotAGroupMemberException | AssertionError | IOException | AttachmentInvalidException | GroupSendingNotAllowedException e) {
+    		throw new Error.Failure(e.getMessage());
+    	} catch (GroupNotFoundException e) {
+    		throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+    	}
+
+    }
+
+    @Override
+    public void setGroupAnnounceOnly(String base64GroupId, boolean isAnnouncementGroup) {
+    	GroupInfo group = null;
+    	byte[] groupId = null;
+    	try {
+    		groupId = GroupId.fromBase64(base64GroupId).serialize();
+    		setGroupAnnounceOnly(groupId, isAnnouncementGroup);
+    	} catch (GroupIdFormatException e) {
+    		throw new Error.Failure("Incorrect format: " + e.getMessage());
+    	}
+    }
+
+    @Override
+    public boolean isGroupAnnounceOnly(byte[] groupId) {
+        GroupInfo group = null;
+        try {
+            group = m.getGroup(getGroupId(groupId));
+        } catch (AssertionError e) {
+            throw new Error.Failure(e.getMessage());
+        }
+        if (group == null) {
+            throw new Error.InvalidGroupId("GroupId is null.");
+        } else {
+            return group.isAnnouncementGroup();
+        }
+    }
+
+    @Override
+    public boolean isGroupAnnounceOnly(String base64GroupId) {
+        GroupInfo group = null;
+        byte[] groupId = null;
+        try {
+            groupId = GroupId.fromBase64(base64GroupId).serialize();
+        } catch (GroupIdFormatException e) {
+            throw new Error.Failure("Incorrect format: " + e.getMessage());
+        }
+        try {
+            group = m.getGroup(getGroupId(groupId));
+        } catch (AssertionError e) {
+            throw new Error.Failure(e.getMessage());
+        }
+        if (group == null) {
+            throw new Error.InvalidGroupId("GroupId is null.");
+        } else {
+            return group.isAnnouncementGroup();
+        }    	
     }
 
     @Override
@@ -1504,7 +1547,7 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
         if (group == null) {
-            throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+            throw new Error.InvalidGroupId("GroupId is null.");
         } else {
              return group.getAdminMembers().contains(m.getSelfRecipientId());
         }
@@ -1525,51 +1568,56 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getMessage());
         }
         if (group == null) {
-            throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+            throw new Error.InvalidGroupId("GroupId is null.");
         } else {
              return group.getAdminMembers().contains(m.getSelfRecipientId());
         }
     }
 
     @Override
-    public List<String> isAdmin(final byte[] groupId, List<String>admins, boolean setAdminStatus) {
+    public List<String> updateAdmins(final byte[] groupId, List<String>admins, boolean addToAdmins) {
         GroupInfo group = null;
         try {
             group = m.getGroup(getGroupId(groupId));
             if (group == null) {
-                throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
+                throw new Error.InvalidGroupId("GroupId is null.");
             }
-            if (setAdminStatus) {
-                var results = m.updateGroup(group.getGroupId(),
+            var localNumber = m.getUsername();
+            if (addToAdmins) {
+                var results = m.updateGroup(getGroupId(groupId),
                         null,
                         null,
                         null,
                         null,
-                        admins,
+                        getSingleRecipientIdentifiers(admins, localNumber),
                         null,
                         false,
                         null,
                         null,
                         null,
                         null,
-                        null);
+                        null,
+                        isGroupAnnounceOnly(groupId)
+                        );
             } else {
-                    var results = m.updateGroup(group.getGroupId(),
-                            null,
-                            null,
-                            null,
-                            null,
-                            null,
-                            admins,
-                            false,
-                            null,
-                            null,
-                            null,
-                            null,
-                            null);
+            	var results = m.updateGroup(getGroupId(groupId),
+            			null,
+            			null,
+            			null,
+            			null,
+            			null,
+            			getSingleRecipientIdentifiers(admins, localNumber),
+            			false,
+            			null,
+            			null,
+            			null,
+            			null,
+            			null,
+            			isGroupAnnounceOnly(groupId)
+            			);
             }
             return getGroupAdminMembers(groupId);
-        } catch (NotAGroupMemberException | InvalidNumberException | AssertionError | IOException | AttachmentInvalidException e) {
+        } catch (NotAGroupMemberException | AssertionError | IOException | AttachmentInvalidException | GroupSendingNotAllowedException e) {
             throw new Error.Failure(e.getMessage());
         } catch (GroupNotFoundException e) {
             throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
@@ -1577,12 +1625,12 @@ public class DbusSignalImpl implements Signal {
     }
 
     @Override
-    public List<String> isAdmin(final String base64GroupId, List<String> admins, boolean setAdminStatus) {
+    public List<String> updateAdmins(final String base64GroupId, List<String> admins, boolean addToAdmins) {
         GroupInfo group = null;
         byte[] groupId = null;
         try {
             groupId = GroupId.fromBase64(base64GroupId).serialize();
-            return isAdmin(groupId, admins, setAdminStatus);
+            return updateAdmins(groupId, admins, addToAdmins);
         } catch (GroupIdFormatException e) {
             throw new Error.Failure("Incorrect format: " + e.getMessage());
         }
@@ -1592,7 +1640,7 @@ public class DbusSignalImpl implements Signal {
         File path = new File(stickerPackPath);
 
         try {
-            return m.uploadStickerPack(path);
+            return m.uploadStickerPack(path).toString();
         } catch (IOException e) {
             throw new Error.Failure("Upload error (maybe image size is too large):" + e.getMessage());
         } catch (StickerPackInvalidException e) {
@@ -1621,19 +1669,6 @@ public class DbusSignalImpl implements Signal {
             throw new Error.Failure(e.getClass().getSimpleName() + " RemoveUserData failed. " + e.getMessage());
         }
     }
-
-    public static DBusConnection.DBusBusType getDbusType(DBusInterface iface) {
-        DBusConnection.DBusBusType busType = null;
-        String objectPath = DbusConfig.getObjectPath();
-        try {
-            var conn = DBusConnection.getConnection(org.freedesktop.dbus.connections.impl.DBusConnection.DBusBusType.SESSION);
-            conn.exportObject(objectPath, iface);
-            conn.unExportObject(objectPath);
-            busType = org.freedesktop.dbus.connections.impl.DBusConnection.DBusBusType.SYSTEM;
-        } catch (DBusException e) {
-            busType = org.freedesktop.dbus.connections.impl.DBusConnection.DBusBusType.SESSION;
-        }
-        return busType;
 
     private static void checkSendMessageResult(long timestamp, SendMessageResult result) throws DBusExecutionException {
         var error = ErrorUtils.getErrorMessageFromSendMessageResult(result);

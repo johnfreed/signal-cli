@@ -4,6 +4,7 @@ import net.sourceforge.argparse4j.impl.Arguments;
 import net.sourceforge.argparse4j.inf.Namespace;
 import net.sourceforge.argparse4j.inf.Subparser;
 
+
 import org.asamk.signal.App;
 import org.asamk.signal.DbusConfig;
 import org.asamk.signal.DbusReceiveMessageHandler;
@@ -22,6 +23,7 @@ import org.asamk.signal.dbus.DbusSignalImpl;
 import org.asamk.signal.manager.Manager;
 import org.asamk.signal.manager.PathConfig;
 import org.asamk.signal.manager.config.ServiceEnvironment;
+import org.asamk.signal.manager.storage.identities.TrustNewIdentity;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusException;
 import org.slf4j.Logger;
@@ -38,8 +40,9 @@ import java.util.concurrent.TimeUnit;
 public class DaemonCommand implements MultiLocalCommand {
 
     private final static Logger logger = LoggerFactory.getLogger(DaemonCommand.class);
-    private static OutputWriter outputWriter;
     public static DBusConnection.DBusBusType dBusType;
+    public static TrustNewIdentity trustNewIdentity;
+    public static OutputWriter outputWriter;
 
     @Override
     public String getName() {
@@ -60,22 +63,18 @@ public class DaemonCommand implements MultiLocalCommand {
 
     }
 
-    public DaemonCommand(final OutputWriter outputWriter) {
-        this.outputWriter = outputWriter;
-    }
-
-    public static OutputWriter getOutputWriter() {
-        return outputWriter;
-    }
-
     @Override
     public List<OutputType> getSupportedOutputTypes() {
         return List.of(OutputType.PLAIN_TEXT, OutputType.JSON);
     }
 
-
     @Override
     public void handleCommand(final Namespace ns, final Manager m, final OutputWriter outputWriter) throws CommandException {
+    	handleCommand(ns, m, null, outputWriter, null);
+    }
+
+    @Override
+    public void handleCommand(final Namespace ns, final Manager m, final SignalCreator c, final OutputWriter outputWriter, final TrustNewIdentity trustNewIdentity) throws CommandException {
         //single-user mode
         boolean ignoreAttachments = ns.getBoolean("ignore-attachments");
 
@@ -85,8 +84,9 @@ public class DaemonCommand implements MultiLocalCommand {
         } else {
             busType = DBusConnection.DBusBusType.SESSION;
         }
-        dBusType = busType;
-
+        this.dBusType = busType;
+        this.trustNewIdentity = trustNewIdentity;
+        this.outputWriter = outputWriter;
         try (var conn = DBusConnection.getConnection(busType)) {
             var objectPath = DbusConfig.getObjectPath();
             var t = run(conn, objectPath, m, outputWriter, ignoreAttachments);
@@ -106,13 +106,8 @@ public class DaemonCommand implements MultiLocalCommand {
     }
 
     @Override
-    public void handleCommand(final Namespace ns, final Manager m) throws CommandException {
-        handleCommand(ns, m, null);
-    }
-
-    @Override
     public void handleCommand(
-            final Namespace ns, final List<Manager> managers, final SignalCreator c, final OutputWriter outputWriter
+            final Namespace ns, final List<Manager> managers, final SignalCreator c, final OutputWriter outputWriter, TrustNewIdentity trustNewIdentity
     ) throws CommandException {
         //anonymous mode
         boolean ignoreAttachments = ns.getBoolean("ignore-attachments");
@@ -122,8 +117,9 @@ public class DaemonCommand implements MultiLocalCommand {
         } else {
             busType = DBusConnection.DBusBusType.SESSION;
         }
-        dBusType = busType;
-
+        this.dBusType = busType;
+        this.trustNewIdentity = trustNewIdentity;
+        this.outputWriter = outputWriter;
         try (var conn = DBusConnection.getConnection(busType)) {
             final var signalControl = new DbusSignalControlImpl(c, m -> {
                 try {
@@ -148,7 +144,7 @@ public class DaemonCommand implements MultiLocalCommand {
             //legitimate to call daemon --number with no numbers
             for (String u : daemonUsernames) {
                 try {
-                    managers.add(App.loadManager(u, settingsPath, serviceEnvironment));
+                    managers.add(App.loadManager(u, settingsPath, serviceEnvironment, trustNewIdentity));
                 } catch (CommandException e) {
                     logger.warn("Ignoring {}: {}", u, e.getMessage());
                 }

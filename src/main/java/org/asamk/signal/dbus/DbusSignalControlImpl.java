@@ -42,6 +42,7 @@ import org.asamk.signal.manager.groups.LastGroupAdminException;
 import org.asamk.signal.manager.groups.NotAGroupMemberException;
 import org.asamk.signal.manager.storage.groups.GroupInfo;
 import org.asamk.signal.manager.storage.identities.IdentityInfo;
+import org.asamk.signal.manager.storage.identities.TrustNewIdentity;
 import org.asamk.signal.util.ErrorUtils;
 import org.asamk.signal.util.Hex;
 import org.asamk.signal.util.Util;
@@ -310,27 +311,28 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
             ServiceEnvironment serviceEnvironment = c.getServiceEnvironment();
 
             //create new manager for this number
-            final Manager m = App.loadManager(number, settingsPath, serviceEnvironment);
+            TrustNewIdentity trustNewIdentity = DaemonCommand.trustNewIdentity;
+            final Manager m = App.loadManager(number, settingsPath, serviceEnvironment, trustNewIdentity);
             this.addManager(m);
 
             final var thread = new Thread(() -> {
                 try {
-                    OutputWriter outputWriter = DaemonCommand.getOutputWriter();
+                    OutputWriter outputWriter = DaemonCommand.outputWriter;
                     boolean ignoreAttachments = false;
                     DBusConnection conn = DBusConnection.getConnection(busType);
+                    
                     while (!Thread.interrupted()) {
                         try {
                             final var receiveMessageHandler = outputWriter instanceof JsonWriter
                                     ? new JsonDbusReceiveMessageHandler(m, (JsonWriter) outputWriter, conn, objectPath)
-                                            : new DbusReceiveMessageHandler(m, (PlainTextWriter) outputWriter, conn, objectPath);
+                                    : new DbusReceiveMessageHandler(m, (PlainTextWriter) outputWriter, conn, objectPath);
                             m.receiveMessages(1, TimeUnit.HOURS, false, ignoreAttachments, receiveMessageHandler);
                             break;
-                        } catch (IOException f) {
-                            logger.warn("Receiving messages failed, retrying", f);
-                        } catch (InterruptedException ignored) {
-                            break;
+                        } catch (IOException e) {
+                            logger.warn("Receiving messages failed, retrying", e);
                         }
                     }
+
                 } catch (DBusException e) {
                     throw new Error.Failure(e.getClass().getSimpleName() + " Listen error: " + e.getMessage());
                 }

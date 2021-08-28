@@ -1,5 +1,8 @@
 package org.asamk.signal.util;
 
+import org.asamk.signal.manager.groups.GroupId;
+import org.asamk.signal.manager.groups.GroupIdFormatException;
+
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.core.JsonGenerator;
@@ -57,6 +60,10 @@ public class Util {
             }
         }
         return f.toString();
+    }
+
+    public static GroupId decodeGroupId(String groupId) throws GroupIdFormatException {
+        return GroupId.fromBase64(groupId);
     }
 
     public static String getLegacyIdentifier(final SignalServiceAddress address) {

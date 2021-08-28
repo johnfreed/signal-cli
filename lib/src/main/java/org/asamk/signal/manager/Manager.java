@@ -135,18 +135,6 @@ public class Manager implements Closeable {
     private final ProfileHelper profileHelper;
     private final PinHelper pinHelper;
     private final PathConfig pathConfig;
-    private final AvatarStore avatarStore;
-    private final AttachmentStore attachmentStore;
-    private final StickerPackStore stickerPackStore;
-    private final SignalSessionLock sessionLock = new SignalSessionLock() {
-        private final ReentrantLock LEGACY_LOCK = new ReentrantLock();
-
-        @Override
-        public Lock acquire() {
-            LEGACY_LOCK.lock();
-            return LEGACY_LOCK::unlock;
-        }
-    };
     private final SendHelper sendHelper;
     private final SyncHelper syncHelper;
     private final AttachmentHelper attachmentHelper;
@@ -255,6 +243,9 @@ public class Manager implements Closeable {
                 jobExecutor);
     }
 
+    public SendHelper getSendHelper() {
+    	return sendHelper;
+    }
     public PathConfig getPathConfig() {
         return pathConfig;
     }
@@ -283,6 +274,7 @@ public class Manager implements Closeable {
             final TrustNewIdentity trustNewIdentity
     ) throws IOException, NotRegisteredException {
         var pathConfig = PathConfig.createDefault(settingsPath);
+
         if (!SignalAccount.userExists(pathConfig.getDataPath(), username)) {
             throw new NotRegisteredException();
         }
@@ -341,9 +333,8 @@ public class Manager implements Closeable {
      * @param numbers The set of phone number in question
      * @return A map of numbers to canonicalized number and uuid. If a number is not registered the uuid is null.
      * @throws IOException if its unable to get the contacts to check if they're registered
-     * @throws InvalidNumberException if phone number is incorrectly formatted
      */
-    public Map<String, Pair<String, UUID>> areUsersRegistered(Set<String> numbers) throws IOException {
+    public Map<String, Pair<String, UUID>> areUsersRegistered(Set<String> numbers) throws IOException, InvalidNumberException {
         Map<String, String> canonicalizedNumbers = numbers.stream().collect(Collectors.toMap(n -> n, n -> {
             try {
                 return canonicalizePhoneNumber(n);
@@ -386,6 +377,7 @@ public class Manager implements Closeable {
      * @param about      if null, the previous about text will be kept
      * @param aboutEmoji if null, the previous about emoji will be kept
      * @param avatar     if avatar is null the image from the local avatar store is used (if present),
+     *                     if an empty file is sent, avatar is deleted
      */
     public void setProfile(
             String givenName, final String familyName, String about, String aboutEmoji, Optional<File> avatar
@@ -550,232 +542,8 @@ public class Manager implements Closeable {
                 addMemberPermission,
                 editDetailsPermission,
                 avatarFile,
-                expirationTimer);
-    }
-
-    private Pair<Long, List<SendMessageResult>> updateGroup(
-            final GroupId groupId,
-            final String name,
-            final String description,
-            final Set<RecipientId> members,
-            final Set<RecipientId> removeMembers,
-            final Set<RecipientId> admins,
-            final Set<RecipientId> removeAdmins,
-            final boolean resetGroupLink,
-            final GroupLinkState groupLinkState,
-            final GroupPermission addMemberPermission,
-            final GroupPermission editDetailsPermission,
-            final File avatarFile,
-            final Integer expirationTimer
-    ) throws IOException, GroupNotFoundException, AttachmentInvalidException, NotAGroupMemberException {
-        var group = getGroupForUpdating(groupId);
-
-        if (group instanceof GroupInfoV2) {
-            try {
-                return updateGroupV2((GroupInfoV2) group,
-                        name,
-                        description,
-                        members,
-                        removeMembers,
-                        admins,
-                        removeAdmins,
-                        resetGroupLink,
-                        groupLinkState,
-                        addMemberPermission,
-                        editDetailsPermission,
-                        avatarFile,
-                        expirationTimer);
-            } catch (ConflictException e) {
-                // Detected conflicting update, refreshing group and trying again
-                group = getGroup(groupId, true);
-                return updateGroupV2((GroupInfoV2) group,
-                        name,
-                        description,
-                        members,
-                        removeMembers,
-                        admins,
-                        removeAdmins,
-                        resetGroupLink,
-                        groupLinkState,
-                        addMemberPermission,
-                        editDetailsPermission,
-                        avatarFile,
-                        expirationTimer,
-                        isAnnouncementGroup);
-            }
-        }
-
-        final var gv1 = (GroupInfoV1) group;
-        final var result = updateGroupV1(gv1, name, members, avatarFile);
-        if (expirationTimer != null) {
-            setExpirationTimer(gv1, expirationTimer);
-        }
-        return result;
-    }
-
-    private Pair<Long, List<SendMessageResult>> updateGroupV1(
-            final GroupInfoV1 gv1, final String name, final Set<RecipientId> members, final File avatarFile
-    ) throws IOException, AttachmentInvalidException {
-        updateGroupV1Details(gv1, name, members, avatarFile);
-        var messageBuilder = getGroupUpdateMessageBuilder(gv1);
-
-        account.getGroupStore().updateGroup(gv1);
-
-        return sendMessage(messageBuilder, gv1.getMembersIncludingPendingWithout(account.getSelfRecipientId()));
-    }
-
-    private void updateGroupV1Details(
-            final GroupInfoV1 g, final String name, final Collection<RecipientId> members, final File avatarFile
-    ) throws IOException {
-        if (name != null) {
-            g.name = name;
-        }
-
-        if (members != null) {
-            final var newMemberAddresses = members.stream()
-                    .filter(member -> !g.isMember(member))
-                    .map(this::resolveSignalServiceAddress)
-                    .collect(Collectors.toList());
-            final var newE164Members = new HashSet<String>();
-            Map<String, UUID> registeredUsers = null;
-            for (var member : newMemberAddresses) {
-                if (!member.getNumber().isPresent()) {
-                    continue;
-                }
-                newE164Members.add(member.getNumber().get());
-            }
-
-            try {
-                registeredUsers = getRegisteredUsers(newE164Members);
-            } catch (InvalidNumberException e) {
-                throw new IOException("Invalid number detected: " + e.getMessage());
-            }
-            if (registeredUsers.size() != newE164Members.size()) {
-                // Some of the new members are not registered on Signal
-                newE164Members.removeAll(registeredUsers.keySet());
-                throw new IOException("Failed to add members "
-                        + String.join(", ", newE164Members)
-                        + " to group: Not registered on Signal");
-            }
-
-            g.addMembers(members);
-        }
-
-        if (avatarFile != null) {
-            avatarStore.storeGroupAvatar(g.getGroupId(),
-                    outputStream -> IOUtils.copyFileToStream(avatarFile, outputStream));
-        }
-    }
-
-    private Pair<Long, List<SendMessageResult>> updateGroupV2(
-            final GroupInfoV2 group,
-            final String name,
-            final String description,
-            final Set<RecipientId> members,
-            final Set<RecipientId> removeMembers,
-            final Set<RecipientId> admins,
-            final Set<RecipientId> removeAdmins,
-            final boolean resetGroupLink,
-            final GroupLinkState groupLinkState,
-            final GroupPermission addMemberPermission,
-            final GroupPermission editDetailsPermission,
-            final File avatarFile,
-            Integer expirationTimer
-    ) throws IOException {
-        Pair<Long, List<SendMessageResult>> result = null;
-        if (group.isPendingMember(account.getSelfRecipientId())) {
-            var groupGroupChangePair = groupV2Helper.acceptInvite(group);
-            result = sendUpdateGroupV2Message(group, groupGroupChangePair.first(), groupGroupChangePair.second());
-        }
-
-        if (members != null) {
-            final var newMembers = new HashSet<>(members);
-            newMembers.removeAll(group.getMembers());
-            if (newMembers.size() > 0) {
-                var groupGroupChangePair = groupV2Helper.addMembers(group, newMembers);
-                result = sendUpdateGroupV2Message(group, groupGroupChangePair.first(), groupGroupChangePair.second());
-            }
-        }
-
-        if (removeMembers != null) {
-            var existingRemoveMembers = new HashSet<>(removeMembers);
-            existingRemoveMembers.retainAll(group.getMembers());
-            existingRemoveMembers.remove(getSelfRecipientId());// self can be removed with sendQuitGroupMessage
-            if (existingRemoveMembers.size() > 0) {
-                var groupGroupChangePair = groupV2Helper.removeMembers(group, existingRemoveMembers);
-                result = sendUpdateGroupV2Message(group, groupGroupChangePair.first(), groupGroupChangePair.second());
-            }
-
-            var pendingRemoveMembers = new HashSet<>(removeMembers);
-            pendingRemoveMembers.retainAll(group.getPendingMembers());
-            if (pendingRemoveMembers.size() > 0) {
-                var groupGroupChangePair = groupV2Helper.revokeInvitedMembers(group, pendingRemoveMembers);
-                result = sendUpdateGroupV2Message(group, groupGroupChangePair.first(), groupGroupChangePair.second());
-            }
-        }
-
-        if (admins != null) {
-            final var newAdmins = new HashSet<>(admins);
-            newAdmins.retainAll(group.getMembers());
-            newAdmins.removeAll(group.getAdminMembers());
-            if (newAdmins.size() > 0) {
-                for (var admin : newAdmins) {
-                    var groupGroupChangePair = groupV2Helper.setMemberAdmin(group, admin, true);
-                    result = sendUpdateGroupV2Message(group,
-                            groupGroupChangePair.first(),
-                            groupGroupChangePair.second());
-                }
-            }
-        }
-
-        if (removeAdmins != null) {
-            final var existingRemoveAdmins = new HashSet<>(removeAdmins);
-            existingRemoveAdmins.retainAll(group.getAdminMembers());
-            if (existingRemoveAdmins.size() > 0) {
-                for (var admin : existingRemoveAdmins) {
-                    var groupGroupChangePair = groupV2Helper.setMemberAdmin(group, admin, false);
-                    result = sendUpdateGroupV2Message(group,
-                            groupGroupChangePair.first(),
-                            groupGroupChangePair.second());
-                }
-            }
-        }
-
-        if (resetGroupLink) {
-            var groupGroupChangePair = groupV2Helper.resetGroupLinkPassword(group);
-            result = sendUpdateGroupV2Message(group, groupGroupChangePair.first(), groupGroupChangePair.second());
-        }
-
-        if (groupLinkState != null) {
-            var groupGroupChangePair = groupV2Helper.setGroupLinkState(group, groupLinkState);
-            result = sendUpdateGroupV2Message(group, groupGroupChangePair.first(), groupGroupChangePair.second());
-        }
-
-        if (addMemberPermission != null) {
-            var groupGroupChangePair = groupV2Helper.setAddMemberPermission(group, addMemberPermission);
-            result = sendUpdateGroupV2Message(group, groupGroupChangePair.first(), groupGroupChangePair.second());
-        }
-
-        if (editDetailsPermission != null) {
-            var groupGroupChangePair = groupV2Helper.setEditDetailsPermission(group, editDetailsPermission);
-            result = sendUpdateGroupV2Message(group, groupGroupChangePair.first(), groupGroupChangePair.second());
-        }
-
-        if (expirationTimer != null) {
-            var groupGroupChangePair = groupV2Helper.setMessageExpirationTimer(group, expirationTimer);
-            result = sendUpdateGroupV2Message(group, groupGroupChangePair.first(), groupGroupChangePair.second());
-        }
-
-        if (name != null || description != null || avatarFile != null) {
-            var groupGroupChangePair = groupV2Helper.updateGroup(group, name, description, avatarFile);
-            if (avatarFile != null) {
-                avatarStore.storeGroupAvatar(group.getGroupId(),
-                        outputStream -> IOUtils.copyFileToStream(avatarFile, outputStream));
-            }
-            result = sendUpdateGroupV2Message(group, groupGroupChangePair.first(), groupGroupChangePair.second());
-        }
-
-        return result;
+                expirationTimer,
+                isAnnouncementGroup);
     }
 
     public Pair<GroupId, SendGroupMessageResults> joinGroup(
@@ -1019,6 +787,9 @@ public class Manager implements Closeable {
         } catch (IOException e) {
             logger.warn("Failed to resolve uuids from server, ignoring: {}", e.getMessage());
             registeredUsers = Map.of();
+        } catch (InvalidNumberException e) {
+            logger.warn("List of users contains invalid number, ignoring: {}", e.getMessage());
+            registeredUsers = Map.of();
         }
 
         for (var address : addressesMissingUuid) {
@@ -1036,24 +807,23 @@ public class Manager implements Closeable {
         return signalServiceAddresses.stream().map(this::resolveRecipient).collect(Collectors.toSet());
     }
 
-    private RecipientId refreshRegisteredUser(RecipientId recipientId) throws IOException, InvalidNumberException {
+    private RecipientId refreshRegisteredUser(RecipientId recipientId) throws IOException {
         final var address = resolveSignalServiceAddress(recipientId);
         if (!address.getNumber().isPresent()) {
             return recipientId;
         }
         final var number = address.getNumber().get();
-        Map<String, UUID> uuidMap;
+        Map<String, UUID> uuidMap = null;
         try {
-            uuidMap = getRegisteredUsers(Set.of(number));
+            uuidMap = getRegisteredUsers(Set.of(number));        	
         } catch (InvalidNumberException e) {
-            logger.warn("Improperly formatted number: {}", e.getMessage());
-            uuidMap = Map.of();
+            logger.warn("List of users contains invalid number, ignoring: {}", e.getMessage());
         }
         return resolveRecipientTrusted(new SignalServiceAddress(uuidMap.getOrDefault(number, null), number));
     }
 
-    private Map<String, UUID> getRegisteredUsers(final Set<String> numbers) throws IOException {
-        final Map<String, UUID> registeredUsers;
+    private Map<String, UUID> getRegisteredUsers(final Set<String> numbers) throws IOException, InvalidNumberException {
+        Map<String, UUID> registeredUsers;
         try {
             registeredUsers = dependencies.getAccountManager()
                     .getRegisteredUsers(ServiceConfig.getIasKeyStore(),

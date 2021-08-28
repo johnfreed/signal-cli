@@ -40,7 +40,7 @@ public class GetUserStatusCommand implements JsonRpcLocalCommand {
             final Namespace ns, final Manager m, final OutputWriter outputWriter
     ) throws CommandException {
         // Get a map of registration statuses
-        Map<String, Boolean> registered = null;
+        Map<String, Pair<String, UUID>> registered = null;
         try {
             registered = m.areUsersRegistered(new HashSet<>(ns.getList("recipient")));
         } catch (IOException e) {

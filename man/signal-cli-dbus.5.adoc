@@ -109,7 +109,7 @@ Exceptions: None
 
 === Methods for groups
 
-getBase64GroupIds() -> groupList<as>::
+getGroupIdsBase64() -> groupList<as>::
 groupList : Array of strings representing the internal group identifiers in Base64 format
 
 All groups known are returned, regardless of their active or blocked status. To query that use isMember() and isGroupBlocked()
@@ -118,7 +118,7 @@ Exceptions: None
 
 getGroupIds() -> groupList<aay>::
 getGroupIds(dummy<s>) -> groupList<as>::
-dummy           : any string (ignored by method; forces output to be identical with getBase64GroupIds)
+dummy           : any string (ignored by method; forces output to be identical with getGroupIdsBase64)
 groupList       : Array of Byte arrays representing the internal group identifiers
 base64GroupList : Array of strings representing the internal group identifiers in Base64 format
 
@@ -143,24 +143,12 @@ getGroupInviteUri(base64GroupId<s>) -> inviteUri<s>::
 Exceptions: Failure if base64GroupId or groupId is malformed; GroupNotFound
 
 getGroupMembers(groupId<ay>) -> members<as>::
-* members       : String array with the phone numbers of all active members of a group
-* groupId       : Byte array representing the internal group identifier
-
-Exceptions: None; returns empty array if group is not found. Use isGroupFound to test.
-
-getGroupMembers(groupId<ay>) -> members<as>::
 getGroupMembers(base64GroupId<s>) -> members<as>::
 * members       : String array with the phone numbers of all active members of a group
 * groupId       : Byte array representing the internal group identifier
 * base64GroupId : String representing the internal group identifier in Base64 format
 
 Exceptions: InvalidGroupId, GroupNotFound
-
-getGroupName(groupId<ay>) -> groupName<s>::
-* groupName       : The display name of the group
-* groupId         : Byte array representing the internal group identifier
-
-Exceptions: None; returns empty string if group is not found. Use isGroupFound to test.
 
 getGroupName(base64GroupId<s>) -> groupName<s>::
 getGroupName(groupId<ay>) -> groupName<s>::
@@ -188,22 +176,9 @@ Exception: Failure if base64GroupId or groupId is malformed; GroupNotFound
 
 isAdmin(groupId<ay>) -> admin<b>::
 isAdmin(base64GroupId<s>) -> admin<b>::
-isAdmin(groupId<ay>, admins<as>, setAdminStatus<b>) -> adminList<as>::
-isAdmin(base64GroupId<s>, admins<as>, setAdminStatus<b>) -> adminList<as>::
 * groupId        : Byte array representing the internal group identifier
 * base64GroupId  : String representing the internal group identifier in Base64 format
-* admins         : Phone numbers of users to grant or deny admin status
-* setAdminStatus : true for add to group admins; false for remove from group admins
 * admin          : Boolean representing whether you are an admin of the group
-* adminList      : List of admins after command execution
-
-Exceptions: GroupNotFound, Failure
-
-isGroupBlocked(groupId<ay>) -> state<b>::
-* groupId       : Byte array representing the internal group identifier
-* state         : true=blocked, false=not blocked
-
-Exceptions: None; returns false if group is not found. Use isGroupFound to test.
 
 isGroupBlocked(base64GroupId<s>) -> state<b>::
 isGroupBlocked(groupId<ay>) -> state<b>::
@@ -216,20 +191,10 @@ Exceptions: InvalidGroupId, GroupNotFound
 isMember(groupId<ay>) -> active<b>::
 isMember(base64GroupId<s>) -> active<b>::
 * groupId         : Byte array representing the internal group identifier
+* base64GroupId   : String representing the internal group identifier in Base64 format
 * active          : Boolean representing whether you are a member of the group
 
 Exceptions: InvalidGroupId
-
-isMember(base64GroupId<s>, members<as>, setMemberStatus<b>) -> memberList<as>::
-isMember(groupId<ay>, members<as>, setMemberStatus<b>) -> memberList<as>::
-* groupId         : Byte array representing the internal group identifier
-* base64GroupId   : String representing the internal group identifier in Base64 format
-* members         : Phone numbers of users to add to or remove from group
-* setMemberStatus : true for add to group members; false for remove from group members
-* active          : Boolean representing whether you are a member of the group
-* memberList      : List of members after command execution
-
-Exceptions: GroupNotFound, Failure
 
 joinGroup(inviteUri<s>) -> <>::
 * inviteUri : String starting with https://signal.group which is generated when you share a group link via Signal App
@@ -276,14 +241,20 @@ sendGroupRemoteDeleteMessage(targetSentTimestamp<x>, base64GroupId<s>) -> timest
 
 Exceptions: Failure, GroupNotFound
 
-sendTyping(typingAction<b>, base64GroupId<s>, recipients<as>) -> <>::
-* typingAction  : true = start typing, false = stop typing
-* base64GroupId : String representing the internal group identifier in Base64 format
-* recipients    : List of phone numbers
-
-Note that you must specify either the base64GroupId or the list of recipients, but not both.
+sendTyping(typingAction<b>, base64GroupId<as>, recipients<as>) -> <>::
+* typingAction   : true = start typing, false = stop typing
+* base64GroupIds : List of strings representing the internal group identifiers in Base64 format
+* numbers        : List of phone numbers for recipients
 
 Exceptions: Failure, UntrustedIdentity
+
+setGroupAnnounceOnly(groupId<ay>, isAnnouncementGroup<b>) -> <>::
+setGroupAnnounceOnly(base64GroupId<s>, isAnnouncementGroup<b>) -> <>::
+* groupId              : Byte array representing the internal group identifier
+* base64GroupId        : String representing the internal group identifier in Base64 format
+* isAnnouncementGroup  : true=only admins can post, false=any member can post
+
+Exceptions: GroupNotFound
 
 setGroupBlocked(groupId<ay>, block<b>) -> <>::
 setGroupBlocked(base64GroupId<s>, block<b>) -> <>::
@@ -295,13 +266,23 @@ Messages from blocked groups will no longer be forwarded via DBus.
 
 Exceptions: GroupNotFound
 
+updateAdmins(groupId<ay>, admins<as>, addToAdmins<b>) -> adminList<as>::
+updateAdmins(base64GroupId<s>, admins<as>, addToAdmins<b>) -> adminList<as>::
+* groupId        : Byte array representing the internal group identifier
+* base64GroupId  : String representing the internal group identifier in Base64 format
+* admins         : Phone numbers of users to grant or deny admin status
+* addToAdmins    : true for add to group admins; false for remove from group admins
+* adminList      : List of admins after command execution
+
+Exceptions: GroupNotFound, Failure
+
 updateGroup(groupId<ay>, name<s>, addMembers<as>, avatar<s>) -> groupId<ay>::
 * groupId               : Byte array representing the internal group identifier (create new group if null)
 * name                  : Name of group (empty if unchanged)
 * addMembers            : String array of new members to be invited to group (empty if unchanged)
 * avatar                : Filename of avatar picture to be set for group (send the name of an empty file to delete avatar; leave field empty if avatar is unchanged)
 
-Exceptions: None; returns empty array if group is not found. Use isGroupFound to test.
+Exceptions:  Failure, InvalidNumber, GroupNotFound
 
 updateGroup(groupId<ay>, name<s>, description<s>, addMembers<s>, removeMembers<s>, addAdmins<s>, removeAdmins<s>, resetGroupLink<b>, groupLinkState<s>, addMemberPermission<s>, editDetailsPermission<s>, avatar<s> expiration<i>) -> groupId<ay>::
 updateGroup(base64GroupId<s>, name<s>, description<s>, addMembers<s>, removeMembers<s>, addAdmins<s>, removeAdmins<s>, resetGroupLink<b>, groupLinkState<s>, addMemberPermission<s>, editDetailsPermission<s>, avatar<s> expiration<i>) -> base64GroupId<s>::
@@ -319,10 +300,22 @@ updateGroup(base64GroupId<s>, name<s>, description<s>, addMembers<s>, removeMemb
 * editDetailsPermission : String of who may edit group details ("every-member", "only-admins") (empty if unchanged)
 * avatar                : Filename of avatar picture to be set for group (send the name of an empty file to delete avatar; leave field empty if avatar is unchanged)
 * expiration            : Expiration time for messages sent to this group (in seconds). Set to 0 to disable. (empty if unchanged)
+* isAnnouncementGroup   : true=only admins can post, false=any member can post
 
 Exceptions: AttachmentInvalid, Failure, InvalidNumber, GroupNotFound
 
 Exceptions: Failure
+
+updateMembers(base64GroupId<s>, members<as>, addToMembers<b>) -> memberList<as>::
+updateMembers(groupId<ay>, members<as>, addToMembers<b>) -> memberList<as>::
+* groupId         : Byte array representing the internal group identifier
+* base64GroupId   : String representing the internal group identifier in Base64 format
+* members         : Phone numbers of users to add to or remove from group
+* addToMembers    : true for add to group members; false for remove from group members
+* active          : Boolean representing whether you are a member of the group
+* memberList      : List of members after command execution
+
+Exceptions: GroupNotFound, Failure
 
 === Methods for individual(s)
 
@@ -409,12 +402,10 @@ Depending on the type of the recipient(s) field this deletes a message with one 
 
 Exceptions: Failure, InvalidNumber
 
-sendTyping(typingAction<b>, base64GroupId<s>, recipients<as>) -> <>::
-* typingAction  : true = start typing, false = stop typing
-* base64GroupId : String representing the internal group identifier in Base64 format
-* recipients    : List of phone numbers
-
-Note that you must specify either the base64GroupId or the list of recipients, but not both.
+sendTyping(typingAction<b>, base64GroupId<as>, recipients<as>) -> <>::
+* typingAction   : true = start typing, false = stop typing
+* base64GroupIds : List of strings representing the internal group identifiers in Base64 format
+* numbers        : List of phone numbers for recipients
 
 Exceptions: Failure, UntrustedIdentity
 
