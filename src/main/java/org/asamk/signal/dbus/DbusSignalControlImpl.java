@@ -73,7 +73,7 @@ import static org.asamk.signal.util.Util.getLegacyIdentifier;
 
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
-import java.io.InputStream; 
+import java.io.InputStream;
 import java.util.function.Consumer;
 
 import java.io.File;
@@ -176,52 +176,41 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
     @Override
     public void register(
             final String number, final boolean voiceVerification
-    ) {
+    ) throws Error.Failure, Error.InvalidNumber {
         registerWithCaptcha(number, voiceVerification, null);
     }
 
     @Override
     public void registerWithCaptcha(
             final String number, final boolean voiceVerification, final String captcha
-    ) {
-        try  {
-            try {
-                registrationManager = c.getNewRegistrationManager(number);
-            } catch (IOException e) {
-                e.printStackTrace();
-            } catch (Exception e) {
-                throw new Error.Failure(e.getMessage());
-            }
+    ) throws Error.Failure, Error.InvalidNumber {
+        try (final RegistrationManager registrationManager = c.getNewRegistrationManager(number)) {
             registrationManager.register(voiceVerification, captcha);
+            registrationManager.close();
         } catch (CaptchaRequiredException e) {
-            try {
-                registrationManager.close();
-            } catch (IOException f) {
-                throw new SCError.Failure(f.getClass().getSimpleName() + " " + f.getMessage());
-            }
             String message = captcha == null ? "Captcha required for verification. Get one from https://signalcaptchas.org/registration/generate.html"
                             : "Invalid captcha given. Get one from https://signalcaptchas.org/registration/generate.html";
-            throw new SCError.RequiresCaptcha(message);
+            throw new SignalControl.Error.RequiresCaptcha(message);
         } catch (IOException e) {
-            throw new SCError.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
+            throw new SignalControl.Error.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
         }
     }
 
     @Override
-    public void verify(final String number, final String verificationCode) {
+    public void verify(final String number, final String verificationCode) throws Error.Failure, Error.InvalidNumber {
         verifyWithPin(number, verificationCode, null);
     }
 
     @Override
-    public void verifyWithPin(final String number, final String verificationCode, final String pin)
-    {
-        try {
+    public void verifyWithPin(
+            final String number, final String verificationCode, final String pin
+    ) throws Error.Failure, Error.InvalidNumber {
+        try (final RegistrationManager registrationManager = c.getNewRegistrationManager(number)) {
             final Manager manager = registrationManager.verifyAccount(verificationCode, pin);
             logger.info("Registration of " + number + " verified");
             manager.close();
-            registrationManager.close();
         } catch (IOException | KeyBackupSystemNoDataException | KeyBackupServicePinException e) {
-            throw new SCError.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
+            throw new SignalControl.Error.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
         }
         listen(number);
     }
@@ -230,54 +219,54 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
     public String link() {
         return link("cli");
     }
-    
+
     @Override
-    public void linkAndDisplay(final String command) {
-    	linkAndDisplay(command, null);
+    public void linkAndDisplay() {
+        linkAndDisplay();
     }
 
     @Override
-    public void linkAndDisplay(String command, String newDeviceName) {
-    	try
-    	{
-    		if (newDeviceName == null) {newDeviceName = "cli";}
-    		String tscode = link(newDeviceName);
-    		tscode = "\"" + tscode + "\"";
-           	boolean isWindows = System.getProperty("os.name")
-        			.toLowerCase().startsWith("windows");
-           	command = command.replaceAll("\\{\\}", tscode);
-        	ProcessBuilder builder = new ProcessBuilder();
-        	if (isWindows) {
-        	    builder.command("cmd.exe", "/c", command);
-        	} else {
-        	    builder.command("sh", "-c", command);
-        	}
-        	builder.directory(new File(System.getProperty("user.home")));
-        	Process process = builder.start();
-        	StreamGobbler streamGobbler = 
-        	  new StreamGobbler(process.getInputStream(), System.out::println);
-        	Executors.newSingleThreadExecutor().submit(streamGobbler);
-    	} catch (IOException e) {
-    		throw new SCError.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
-    	}
+    public void linkAndDisplay(String newDeviceName) {
+        try
+        {
+            if (newDeviceName == null) {newDeviceName = "cli";}
+            String tscode = link(newDeviceName);
+            tscode = "\"" + tscode + "\"";
+               boolean isWindows = System.getProperty("os.name")
+                    .toLowerCase().startsWith("windows");
+               tscode = tscode.replaceAll("\\{\\}", tscode);
+               String command = "echo " + tscode + "|qrencode -s10 -o -|display -";
+            ProcessBuilder builder = new ProcessBuilder();
+            if (isWindows) {
+                builder.command("cmd.exe", "/c", command);
+            } else {
+                builder.command("sh", "-c", command);
+            }
+            builder.directory(new File(System.getProperty("user.home")));
+            Process process = builder.start();
+            StreamGobbler streamGobbler = new StreamGobbler(process.getInputStream(), System.out::println);
+            Executors.newSingleThreadExecutor().submit(streamGobbler);
+        } catch (IOException e) {
+            throw new SignalControl.Error.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
+        }
     }
 
     @Override
     public String link(final String newDeviceName) {
         try {
-            provisioningManager = c.getNewProvisioningManager();
+            final ProvisioningManager provisioningManager = c.getNewProvisioningManager();
             final URI deviceLinkUri = provisioningManager.getDeviceLinkUri();
             new Thread(() -> {
                 try {
-                    Manager manager = provisioningManager.finishDeviceLink(newDeviceName);
+                    final Manager manager = provisioningManager.finishDeviceLink(newDeviceName);
                     logger.info("Linking of " + newDeviceName + " successful");
                     manager.close();
                 } catch (TimeoutException e) {
-                    throw new SCError.Failure(e.getClass().getSimpleName() + ": Link request timed out, please try again.");
+                    throw new SignalControl.Error.Failure(e.getClass().getSimpleName() + ": Link request timed out, please try again.");
                 } catch (IOException e) {
-                    throw new SCError.Failure(e.getClass().getSimpleName() + ": Link request error: " + e.getMessage());
+                    throw new SignalControl.Error.Failure(e.getClass().getSimpleName() + ": Link request error: " + e.getMessage());
                 } catch (UserAlreadyExists e) {
-                    throw new SCError.Failure(e.getClass().getSimpleName() + ": The user "
+                    throw new SignalControl.Error.Failure(e.getClass().getSimpleName() + ": The user "
                             + e.getUsername()
                             + " already exists\nDelete \""
                             + e.getFileName()
@@ -286,16 +275,15 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
             }).start();
             return deviceLinkUri.toString();
         } catch (TimeoutException | IOException e) {
-            throw new SCError.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
+            throw new SignalControl.Error.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
         }
     }
-    
+
     @Override
     public String version() {
         return BaseConfig.PROJECT_VERSION;
     }
 
-    
     @Override
     public void listen(String number) {
         try {
@@ -320,7 +308,6 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
                     OutputWriter outputWriter = DaemonCommand.outputWriter;
                     boolean ignoreAttachments = false;
                     DBusConnection conn = DBusConnection.getConnection(busType);
-                    
                     while (!Thread.interrupted()) {
                         try {
                             final var receiveMessageHandler = outputWriter instanceof JsonWriter
@@ -332,7 +319,6 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
                             logger.warn("Receiving messages failed, retrying", e);
                         }
                     }
-
                 } catch (DBusException e) {
                     throw new Error.Failure(e.getClass().getSimpleName() + " Listen error: " + e.getMessage());
                 }

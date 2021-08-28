@@ -7,7 +7,7 @@ vim:set ts=4 sw=4 tw=82 noet:
 
 == Name
 
-DBus API for signal-cli - A commandline and dbus interface for the Signal messenger
+signal-cli-dbus - DBus API for signal-cli(1)
 
 == Synopsis
 
@@ -54,14 +54,14 @@ link(newDeviceName<s>) -> deviceLinkUri<s>::
 
 Exception: Failure
 
-linkAndDisplay(command<s>) -> <>::
-linkAndDisplay(command<s>, newDeviceName<s>) -> <>::
-* command       : Arbitrary shell command, replacing {} with URI of newly linked device 
+linkAndDisplay() -> <>::
+linkAndDisplay(newDeviceName<s>) -> <>::
 * newDeviceName : Name to give new device (defaults to "cli" if no name is given)
 
-Starts a new shell process and executes command. For example: "echo {}|qrencode -s10 -o -|feh -"
+Issues a link request, then starts a new shell process and executes the command "echo *URI*|qrencode -s10 -o -|feh -"
+Note that you must have qrencode and imageMagick (display command) installed in your PATH.
 
-Exception: Failure if system fails to support `cmd.exe` (Windows) or `sh` (others)
+Exception: Failure
 
 listAccounts() -> <accountList<as>>::
 * accountList : Array of all accounts attached to this DBus
@@ -622,7 +622,7 @@ Same as above, but daemon running on the session bus::
 dbus-send --session --print-reply --type=method_call --dest='org.asamk.Signal' /org/asamk/Signal/_1234567890 org.asamk.Signal.getGroupName array:byte:139,22,72,247,116,32,170,104,205,164,207,21,248,77,185
 
 Display a QR code for linking from a smartphone::
-dbus-send --session --type=method_call --print-reply --dest="org.asamk.Signal" /org/asamk/Signal org.asamk.Signal.linkAndDisplay string:"echo {}|qrencode -s10 -o -|feh -" string:"My New Client"
+dbus-send --session --type=method_call --print-reply --dest="org.asamk.Signal" /org/asamk/Signal org.asamk.Signal.linkAndDisplay string:"My New Client"
 
 == Authors
 
