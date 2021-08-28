@@ -1,0 +1,2991 @@
+'\" t
+.\"     Title: signal-cli-dbus
+.\"    Author: [see the "Authors" section]
+.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
+.\"      Date: 08/28/2021
+.\"    Manual: \ \&
+.\"    Source: \ \&
+.\"  Language: English
+.\"
+.TH "SIGNAL\-CLI\-DBUS" "5" "08/28/2021" "\ \&" "\ \&"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+signal-cli-dbus \- DBus API for signal\-cli(1)
+.SH "SYNOPSIS"
+.sp
+\fBsignal\-cli\fR [\-\-verbose] [\-\-config CONFIG] [\-u USERNAME] [\-o {plain\-text,json}] daemon [\-\-system]
+.sp
+\fBdbus\-send\fR [\-\-system | \-\-session] [\-\-print\-reply] \-\-type=method_call \-\-dest="org\&.asamk\&.Signal" /org/asamk/Signal[/_<phonenum>] org\&.asamk\&.Signal\&.<method> [string:<string argument>] [array:<type>:<array argument>]
+.sp
+Note: when daemon was started without explicit \-u USERNAME, the dbus\-send command requires adding the phone number in /org/asamk/Signal/_<phonenum>\&.
+.SH "DESCRIPTION"
+.sp
+See signal\-cli (1) for details on the application\&.
+.sp
+This documentation handles the supported methods when running signal\-cli as a DBus daemon\&.
+.sp
+The method are described as follows:
+.sp
+method(arg1<type>, arg2<type>, \&...) → return<type>
+.sp
+Where <type> is according to DBus specification:
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+<a> : Array of \&...
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+<s> : String
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+<y> : Byte
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+<b> : Boolean (false|true)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+<x> : Signed 64\-bit integer (long)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+<i> : Signed 32\-bit integer (int)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+<> : no return value
+.RE
+.sp
+Exceptions are the names of the Java Exceptions returned in the body field\&. They typically contain an additional message with details\&. All Exceptions begin with "org\&.asamk\&.Signal\&.Error\&." which is omitted here for better readability\&.
+.sp
+Phone numbers always have the format +<countrycode><regional number>
+.SH "METHODS"
+.SS "Control methods"
+.sp
+Note that these methods are directed to org/asamk/Signal and not to any individual account\&. Only version() is activated in single\-user mode; the rest are disabled\&.
+.PP
+link() → deviceLinkUri<s>, link(newDeviceName<s>) → deviceLinkUri<s>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+newDeviceName : Name to give new device (defaults to "cli" if no name is given)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+deviceLinkUri : URI of newly linked device
+.RE
+.RE
+.sp
+Exception: Failure
+.PP
+linkAndDisplay(command<s>) → <>, linkAndDisplay(command<s>, newDeviceName<s>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+command : Arbitrary shell command, replacing {} with URI of newly linked device
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+newDeviceName : Name to give new device (defaults to "cli" if no name is given)
+.RE
+.RE
+.sp
+Starts a new shell process and executes command\&. For example: "echo {}|qrencode \-s10 \-o \-|feh \-"
+.sp
+Exception: Failure if system fails to support cmd\&.exe (Windows) or sh (others)
+.PP
+listAccounts() → <accountList<as>>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+accountList : Array of all accounts attached to this DBus
+.RE
+.RE
+.sp
+Exceptions: None
+.PP
+listen(number<s>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number Adds a number to those listening to DBus\&.
+.RE
+.RE
+.sp
+Exceptions: Failure, InvalidNumber
+.PP
+register(number<s>, voiceVerification<b>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+voiceVerification : true = use voice verification; false = use SMS verification
+.RE
+.RE
+.sp
+Exceptions: Failure, InvalidNumber, RequiresCaptcha
+.PP
+registerWithCaptcha(number<s>, voiceVerification<b>, captcha<s>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+voiceVerification : true = use voice verification; false = use SMS verification
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+captcha : Captcha string
+.RE
+.RE
+.sp
+Exceptions: Failure, InvalidNumber, RequiresCaptcha
+.PP
+verify(number<s>, verificationCode<s>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+verificationCode : Code received from Signal after successful registration request
+.RE
+.RE
+.sp
+Command fails if PIN was set after previous registration; use verifyWithPin instead\&.
+.sp
+Exception: Failure, InvalidNumber
+.PP
+verifyWithPin(number<s>, verificationCode<s>, pin<s>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+verificationCode : Code received from Signal after successful registration request
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+pin : PIN you set with setPin command after verifying previous registration
+.RE
+.RE
+.sp
+Exception: Failure, InvalidNumber
+.PP
+version() → version<s>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+version : Version string of signal\-cli
+.RE
+.RE
+.sp
+Exceptions: None
+.SS "Methods for groups"
+.PP
+getGroupIdsBase64() → groupList<as>
+.RS 4
+groupList : Array of strings representing the internal group identifiers in Base64 format
+.RE
+.sp
+All groups known are returned, regardless of their active or blocked status\&. To query that use isMember() and isGroupBlocked()
+.sp
+Exceptions: None
+.PP
+getGroupIds() → groupList<aay>, getGroupIds(dummy<s>) → groupList<as>
+.RS 4
+dummy : any string (ignored by method; forces output to be identical with getGroupIdsBase64) groupList : Array of Byte arrays representing the internal group identifiers base64GroupList : Array of strings representing the internal group identifiers in Base64 format
+.RE
+.sp
+All groups known are returned, regardless of their active or blocked status\&. To query that use isMember() and isGroupBlocked()
+.sp
+Exceptions: None
+.PP
+getGroupAdminMembers(groupId<ay>) → adminMembers<as>, getGroupAdminMembers(base64GroupId<s>) → adminMembers<as>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+adminMembers : String array of members granted admin privileges
+.RE
+.RE
+.sp
+Exception: Failure if base64GroupId or groupId is malformed; GroupNotFound
+.PP
+getGroupInviteUri(groupId<ay>) → inviteUri<s>, getGroupInviteUri(base64GroupId<s>) → inviteUri<s>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+inviteUri : String starting with
+https://signal\&.group
+which is generated when you share a group link via Signal App
+.RE
+.RE
+.sp
+Exceptions: Failure if base64GroupId or groupId is malformed; GroupNotFound
+.PP
+getGroupMembers(groupId<ay>) → members<as>, getGroupMembers(base64GroupId<s>) → members<as>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+members : String array with the phone numbers of all active members of a group
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.RE
+.sp
+Exceptions: InvalidGroupId, GroupNotFound
+.PP
+getGroupName(base64GroupId<s>) → groupName<s>, getGroupName(groupId<ay>) → groupName<s>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupName : The display name of the group
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.RE
+.sp
+Exceptions: InvalidGroupId, GroupNotFound
+.PP
+getGroupPendingMembers(groupId<ay>) → pendingMembers<as>, getGroupPendingMembers(base64GroupId<s>) → pendingMembers<as>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+pendingMembers : String array of pending members
+.RE
+.RE
+.sp
+Exception: Failure if base64GroupId or groupId is malformed; GroupNotFound
+.PP
+getGroupRequestingMembers(groupId<ay>) → requestingMembers<as>, getGroupRequestingMembers(base64GroupId<s>) → requestingMembers<as>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+requestingMembers : String array of requesting members (awaiting admin approval for membership)
+.RE
+.RE
+.sp
+Exception: Failure if base64GroupId or groupId is malformed; GroupNotFound
+.PP
+isAdmin(groupId<ay>) → admin<b>, isAdmin(base64GroupId<s>) → admin<b>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+admin : Boolean representing whether you are an admin of the group
+.RE
+.RE
+.PP
+isGroupBlocked(base64GroupId<s>) → state<b>, isGroupBlocked(groupId<ay>) → state<b>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+state : true=blocked, false=not blocked
+.RE
+.RE
+.sp
+Exceptions: InvalidGroupId, GroupNotFound
+.PP
+isMember(groupId<ay>) → active<b>, isMember(base64GroupId<s>) → active<b>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+active : Boolean representing whether you are a member of the group
+.RE
+.RE
+.sp
+Exceptions: InvalidGroupId
+.PP
+joinGroup(inviteUri<s>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+inviteUri : String starting with
+https://signal\&.group
+which is generated when you share a group link via Signal App
+.RE
+.RE
+.sp
+Exceptions: Failure
+.PP
+quitGroup(groupId<ay>) → <>, quitGroup(base64GroupId<s>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.RE
+.sp
+Note that quitting a group will not remove the group from the getGroupIds command, but set it inactive which can be tested with isMember()
+.sp
+Exceptions: GroupNotFound, Failure
+.PP
+sendGroupMessage(message<s>, attachments<as>, groupId<ay>) → timestamp<x>, sendGroupMessage(message<s>, attachments<as>, base64GroupId<s>) → timestamp<x>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+message : Text to send (can be UTF8)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+attachments : String array of filenames or URLs to send as attachments
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Long, can be used to identify the corresponding Signal reply
+.RE
+.RE
+.sp
+Exceptions: GroupNotFound, Failure, AttachmentInvalid
+.PP
+sendGroupMessageReaction(emoji<s>, remove<b>, targetAuthor<s>, targetSentTimestamp<x>, groupId<ay>) → timestamp<x>, sendGroupMessageReaction(emoji<s>, remove<b>, targetAuthor<s>, targetSentTimestamp<x>, base64GroupId<s>) → timestamp<x>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+emoji : Unicode grapheme cluster of the emoji
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+remove : Boolean, whether a previously sent reaction (emoji) should be removed
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+targetAuthor : String with the phone number of the author of the message to which to react
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+targetSentTimestamp : Long representing timestamp of the message to which to react
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array with base64 encoded group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Long, can be used to identify the corresponding Signal reply
+.RE
+.RE
+.sp
+Exceptions: Failure, InvalidNumber, GroupNotFound
+.PP
+sendGroupRemoteDeleteMessage(targetSentTimestamp<x>, groupId<ay>) → timestamp<x>, sendGroupRemoteDeleteMessage(targetSentTimestamp<x>, base64GroupId<s>) → timestamp<x>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+targetSentTimestamp : Long representing timestamp of the message to delete
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Long, can be used to identify the corresponding Signal reply
+.RE
+.RE
+.sp
+Exceptions: Failure, GroupNotFound
+.PP
+sendTyping(typingAction<b>, base64GroupId<as>, recipients<as>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+typingAction : true = start typing, false = stop typing
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupIds : List of strings representing the internal group identifiers in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+numbers : List of phone numbers for recipients
+.RE
+.RE
+.sp
+Exceptions: Failure, UntrustedIdentity
+.PP
+setGroupAnnounceOnly(groupId<ay>, isAnnouncementGroup<b>) → <>, setGroupAnnounceOnly(base64GroupId<s>, isAnnouncementGroup<b>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+isAnnouncementGroup : true=only admins can post, false=any member can post
+.RE
+.RE
+.sp
+Exceptions: GroupNotFound
+.PP
+setGroupBlocked(groupId<ay>, block<b>) → <>, setGroupBlocked(base64GroupId<s>, block<b>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+block : false=remove block, true=block contact
+.RE
+.RE
+.sp
+Messages from blocked groups will no longer be forwarded via DBus\&.
+.sp
+Exceptions: GroupNotFound
+.PP
+updateAdmins(groupId<ay>, admins<as>, addToAdmins<b>) → adminList<as>, updateAdmins(base64GroupId<s>, admins<as>, addToAdmins<b>) → adminList<as>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+admins : Phone numbers of users to grant or deny admin status
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+addToAdmins : true for add to group admins; false for remove from group admins
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+adminList : List of admins after command execution
+.RE
+.RE
+.sp
+Exceptions: GroupNotFound, Failure
+.PP
+updateGroup(groupId<ay>, name<s>, addMembers<as>, avatar<s>) → groupId<ay>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier (create new group if null)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+name : Name of group (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+addMembers : String array of new members to be invited to group (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+avatar : Filename of avatar picture to be set for group (send the name of an empty file to delete avatar; leave field empty if avatar is unchanged)
+.RE
+.RE
+.sp
+Exceptions: Failure, InvalidNumber, GroupNotFound
+.PP
+updateGroup(groupId<ay>, name<s>, description<s>, addMembers<s>, removeMembers<s>, addAdmins<s>, removeAdmins<s>, resetGroupLink<b>, groupLinkState<s>, addMemberPermission<s>, editDetailsPermission<s>, avatar<s> expiration<i>) → groupId<ay>, updateGroup(base64GroupId<s>, name<s>, description<s>, addMembers<s>, removeMembers<s>, addAdmins<s>, removeAdmins<s>, resetGroupLink<b>, groupLinkState<s>, addMemberPermission<s>, editDetailsPermission<s>, avatar<s> expiration<i>) → base64GroupId<s>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier (create new group if null)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format (create new group if empty)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+name : Name of group (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+description : Description (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+addMembers : String array of new members to be invited to group (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+removeMembers : String array of members to be removed from group (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+addAdmins : String array of members granted admin privileges (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+removeAdmins : String array of members denied admin privileges (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+resetGroupLink : Boolean (true = change the group link, false = don\(cqt change)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupLinkState : String ("enabled", "enabled\-with\-approval", "disabled") (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+addMemberPermission : String of who may add members ("every\-member", "only\-admins") (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+editDetailsPermission : String of who may edit group details ("every\-member", "only\-admins") (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+avatar : Filename of avatar picture to be set for group (send the name of an empty file to delete avatar; leave field empty if avatar is unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+expiration : Expiration time for messages sent to this group (in seconds)\&. Set to 0 to disable\&. (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+isAnnouncementGroup : true=only admins can post, false=any member can post
+.RE
+.RE
+.sp
+Exceptions: AttachmentInvalid, Failure, InvalidNumber, GroupNotFound
+.sp
+Exceptions: Failure
+.PP
+updateMembers(base64GroupId<s>, members<as>, addToMembers<b>) → memberList<as>, updateMembers(groupId<ay>, members<as>, addToMembers<b>) → memberList<as>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupId : String representing the internal group identifier in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+members : Phone numbers of users to add to or remove from group
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+addToMembers : true for add to group members; false for remove from group members
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+active : Boolean representing whether you are a member of the group
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+memberList : List of members after command execution
+.RE
+.RE
+.sp
+Exceptions: GroupNotFound, Failure
+.SS "Methods for individual(s)"
+.PP
+getContactName(number<s>) → name<s>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+name : Contact\(cqs name in local storage (from the primary device for a linked account, or the one set with setContactName); if not set, contact\(cqs profile name is used
+.RE
+.RE
+.sp
+Exception: InvalidNumber
+.PP
+getContactNumber(name<s>) → numbers<as>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+numbers : Array of phone numbers
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+name : Contact or profile name ("firstname lastname")
+.RE
+.RE
+.sp
+Searches contacts and known profiles for a given name and returns the list of all known numbers\&. May result in e\&.g\&. two entries if a contact and profile name is set\&.
+.sp
+Exception: Failure
+.PP
+isContactBlocked(number<s>) → state<b>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+state : true=blocked, false=not blocked
+.RE
+.RE
+.sp
+Exception: InvalidNumber for an incorrectly formatted phone number\&. For unknown numbers, false is returned, but no exception is raised\&.
+.PP
+isRegistered(number<s>) → result<b>, isRegistered(numbers<as>) → results<ab>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+numbers : String array of phone numbers
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+result : true=number is registered, false=number is not registered
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+results : Boolean array of results
+.RE
+.RE
+.sp
+Exception: InvalidNumber for an incorrectly formatted phone number\&. For unknown numbers, false is returned, but no exception is raised\&.
+.PP
+listIdentity(number<s>) → identities<a(ssss)>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+identities : Array of elements, each consisting of four strings: trust_level, date_added, fingerprint, safety_number
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+trust_level : String representation of trust level
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+date_added : String representation of date added
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+fingerprint : String representation of hexidecimal fingerprint
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+safety_number : String representation of safety number (10 or 11 space\-separated six\-digit numbers)
+.RE
+.RE
+.RE
+.sp
+Exception: InvalidNumber
+.PP
+sendEndSessionMessage(recipients<as>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+recipients : String array of phone numbers
+.RE
+.RE
+.sp
+Ends (resets) the Signal secure session with recipients\&.
+.sp
+Exceptions: Failure, InvalidNumber, UntrustedIdentity
+.PP
+sendMessage(message<s>, attachments<as>, recipient<s>) → timestamp<x>, sendMessage(message<s>, attachments<as>, recipients<as>) → timestamp<x>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+message : Text to send (can be UTF8)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+attachments : String array of filenames or URLs to send as attachments
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+recipient : Phone number of a single recipient represented as string
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+recipients : String array of phone numbers
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Long, can be used to identify the corresponding Signal reply
+.RE
+.RE
+.sp
+Depending on the type of the recipient field this sends a message to one or multiple recipients\&.
+.sp
+Exceptions: AttachmentInvalid, Failure, InvalidNumber, UntrustedIdentity
+.PP
+sendMessageReaction(emoji<s>, remove<b>, targetAuthor<s>, targetSentTimestamp<x>, recipient<s>) → timestamp<x>, sendMessageReaction(emoji<s>, remove<b>, targetAuthor<s>, targetSentTimestamp<x>, recipients<as>) → timestamp<x>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+emoji : Unicode grapheme cluster of the emoji
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+remove : Boolean, whether a previously sent reaction (emoji) should be removed
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+targetAuthor : String with the phone number of the author of the message to which to react
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+targetSentTimestamp : Long representing timestamp of the message to which to react
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+recipient : String with the phone number of a single recipient
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+recipients : Array of strings with phone numbers, should there be more recipients
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Long, can be used to identify the corresponding Signal reply
+.RE
+.RE
+.sp
+Depending on the type of the recipient(s) field this sends a reaction to one or multiple recipients\&.
+.sp
+Exceptions: Failure, InvalidNumber
+.PP
+sendRemoteDeleteMessage(targetSentTimestamp<x>, recipient<s>) → timestamp<x>, sendRemoteDeleteMessage(targetSentTimestamp<x>, recipients<as>) → timestamp<x>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+targetSentTimestamp : Long representing timestamp of the message to delete
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+recipient : String with the phone number of a single recipient
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+recipients : Array of strings with phone numbers, should there be more recipients
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Long, can be used to identify the corresponding signal reply
+.RE
+.RE
+.sp
+Depending on the type of the recipient(s) field this deletes a message with one or multiple recipients\&.
+.sp
+Exceptions: Failure, InvalidNumber
+.PP
+sendTyping(typingAction<b>, base64GroupId<as>, recipients<as>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+typingAction : true = start typing, false = stop typing
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+base64GroupIds : List of strings representing the internal group identifiers in Base64 format
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+numbers : List of phone numbers for recipients
+.RE
+.RE
+.sp
+Exceptions: Failure, UntrustedIdentity
+.PP
+setContactBlocked(number<s>, block<b>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number affected by method
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+block : false=remove block, true=block contact
+.RE
+.RE
+.sp
+Messages from blocked numbers will no longer be forwarded via DBus\&.
+.sp
+Exceptions: InvalidNumber
+.PP
+setContactName(number<s>,name<>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+name : Name to be set in contacts (in local storage with signal\-cli)
+.RE
+.RE
+.sp
+Exception: InvalidNumber
+.PP
+setExpirationTimer(number<s>,expiration<i>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+expiration : Expiration time for messages sent to this number (in seconds)\&. Set to 0 to disable\&.
+.RE
+.RE
+.sp
+Exception: InvalidNumber
+.PP
+trust(number<s>, safetyNumber<s>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : Phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+safetyNumber : Verify the safety number associated with the phone number\&.
+.RE
+.RE
+.sp
+Exceptions: Failure, InvalidNumber
+.SS "Other methods"
+.PP
+addDevice(deviceUri<s>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+deviceUri : URI in the form of tsdevice:/?uuid=\&... Normally received from Signal desktop or smartphone app
+.RE
+.RE
+.sp
+Exception: Failure
+.PP
+getObjectPath() → objectPath<s>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+objectPath : The DBus object path associated with this connection
+.RE
+.RE
+.sp
+Exceptions: None
+.PP
+listDevices() → devices<as>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+devices : String array of linked devices
+.RE
+.RE
+.sp
+Exception: Failure
+.PP
+listNumbers() → numbers<as>
+.RS 4
+numbers : String array of all known numbers
+.RE
+.sp
+This is a concatenated list of all defined contacts as well of profiles known (e\&.g\&. peer group members or sender of received messages)
+.sp
+Exceptions: None
+.PP
+removeDevice(deviceId<i>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+deviceId : Device ID to remove, obtained from listDevices() command
+.RE
+.RE
+.sp
+Exception: Failure
+.PP
+removePin() → <>
+.RS 4
+Removes registration PIN protection\&.
+.RE
+.sp
+Exception: Failure
+.PP
+sendContacts() → <>
+.RS 4
+Sends a synchronization message with the local contacts list to all linked devices\&.
+.RE
+.sp
+Exceptions: Failure, UntrustedIdentity
+.PP
+sendNoteToSelfMessage(message<s>, attachments<as>) → timestamp<x>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+message : Text to send (can be UTF8)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+attachments : String array of filenames or URLs to send as attachments
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Long, can be used to identify the corresponding Signal reply
+.RE
+.RE
+.sp
+Exceptions: Failure, AttachmentInvalid
+.PP
+sendSyncRequest() → <>
+.RS 4
+Sends a synchronization request to the primary device (for group, contacts, \&...)\&. Only works if a secondary device is running the daemon\&.
+.RE
+.sp
+Exception: Failure
+.PP
+setPin(pin<s>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+pin : PIN you set after registration (resets after 7 days of inactivity)
+.RE
+.RE
+.sp
+Sets a registration lock PIN, to prevent others from registering your number\&.
+.sp
+Exception: Failure
+.PP
+unlisten() → <>, unlisten(keepData<b>) → <>
+.RS 4
+Stops the current device from listening to DBus\&. In single\-user mode, kills the daemon\&.
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+keepData : true or omitted = keep files in data directory; false = delete files
+.RE
+.RE
+.sp
+Exception: Failure
+.PP
+unregister() → <>, unregister(keepData<b>) → <>
+.RS 4
+Unregisters the current device\&. In single\-user mode, kills the daemon\&.
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+keepData : true or omitted = keep files in data directory; false = delete files
+.RE
+.RE
+.sp
+Exception: Failure
+.PP
+updateAccount() → <>
+.RS 4
+Updates the account attributes on the Signal server\&.
+.RE
+.sp
+Exception: Failure
+.PP
+updateProfile(name<s>, about<s>, aboutEmoji <s>, avatar<s>, remove<b>) → <>, updateProfile(givenName<s>, familyName<s>, about<s>, aboutEmoji <s>, avatar<s>, remove<b>) → <>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+name : Name for your own profile (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+givenName : Given name for your own profile (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+familyName : Family name for your own profile (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+about : About message for profile (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+aboutEmoji : Emoji for profile (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+avatar : Filename of avatar picture for profile (empty if unchanged)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+remove : Set to true if the existing avatar picture should be removed
+.RE
+.RE
+.PP
+uploadStickerPack(stickerPackPath<s>) → url<s>
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+stickerPackPath : Path to the manifest\&.json file or a zip file in the same directory
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+url : URL of sticker pack after successful upload
+.RE
+.RE
+.sp
+Exception: Failure
+.SH "SIGNALS"
+.PP
+SyncMessageReceived (timestamp<x>, sender<s>, destination<s>, groupId<ay>, message<s>, attachments<as>)
+.RS 4
+The sync message is received when the user sends a message from a linked device\&.
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Integer value that is used by the system to send a ReceiptReceived reply
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+sender : Phone number of the sender
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+destination : UUID (legacy identifier) of the destination
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier (empty when private message)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+message : Message text
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+attachments : String array of filenames for the attachments\&. These files are located in the signal\-cli storage and the current user needs to have read access there
+.RE
+.RE
+.PP
+MessageReceived(timestamp<x>, sender<s>, groupId<ay>, message<s>, attachments<as>)
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Integer value that is used by the system to send a ReceiptReceived reply
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+sender : Phone number of the sender
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier (empty when private message)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+message : Message text
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+attachments : String array of filenames for the attachments\&. These files are located in the signal\-cli storage and the current user needs to have read access there
+.RE
+.RE
+.sp
+This signal is received whenever we get a private message or a message is posted in a group we are an active member
+.PP
+SyncMessageReceivedV2 (timestamp<x>, sender<s>, destination<s>, groupId<ay>, message<s>, mentions<a(sii)>, attachments<a(sssxibiiss)>)
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Integer value that is used by the system to send a ReceiptReceived reply
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+sender : Phone number of the sender
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+destination : UUID (legacy identifier) of the destination
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier (empty when private message)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+message : Message text
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+mentions : Struct array of mentions: number, position, length
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : String phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+position : Integer starting position of mention within message
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+length : Integer length of mention within message
+.RE
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+attachments : Struct array of attachment metadata\&.
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+contentType : String representing the MIME type of the attachment
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+fileName : String representing file name if given by the Signal servers
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+id : String representing remote identifier of attachment\&. This the name used by signal\-cli to store the attachment, and the current user needs to have read access
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+size : Long representing size of attachment in bytes
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+keyLength : Integer representing key length
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+voiceNote : boolean representing whether this attachment is a voice note
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+width : Integer representation of width in pixels (0 if not image)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+height : Integer representation of height in pixels (0 if not image)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+caption : String representing photo caption
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+blurHash : String representing blur hash
+.RE
+.RE
+.RE
+.sp
+The sync message is received when the user sends a message from a linked device\&.
+.PP
+MessageReceivedV2(timestamp<x>, sender<s>, groupId<ay>, message<s>, mentions<a(sii)>, attachments<a(sssxibiiss)>)
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Integer value that is used by the system to send a ReceiptReceived reply
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+sender : Phone number of the sender
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+groupId : Byte array representing the internal group identifier (empty when private message)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+message : Message text
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+mentions : Struct array of mentions: number, position, length
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+number : String phone number
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+position : Integer starting position of mention within message
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+length : Integer length of mention within message
+.RE
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+attachments : Struct array of attachment metadata\&.
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+contentType : String representing the MIME type of the attachment
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+fileName : String representing file name if given by the Signal servers
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+id : String representing remote identifier of attachment\&. This the name used by signal\-cli to store the attachment, and the current user needs to have read access
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+size : Long representing size of attachment in bytes
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+keyLength : Integer representing key length
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+voiceNote : boolean representing whether this attachment is a voice note
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+width : Integer representation of width in pixels (0 if not image)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+height : Integer representation of height in pixels (0 if not image)
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+caption : String representing photo caption
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+blurHash : String representing blur hash
+.RE
+.RE
+.RE
+.sp
+This signal is received whenever we get a private message or a message is posted in a group we are an active member
+.PP
+ReceiptReceived (timestamp<x>, sender<s>)
+.RS 4
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+timestamp : Integer value that can be used to associate this e\&.g\&. with a sendMessage()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+sender : Phone number of the sender
+.RE
+.RE
+.sp
+This signal is sent by each recipient (e\&.g\&. each group member) after the message was successfully delivered to the device
+.SH "EXAMPLES"
+.PP
+Send a text message (without attachment) to a contact
+.RS 4
+dbus\-send \-\-print\-reply \-\-type=method_call \-\-dest="org\&.asamk\&.Signal" /org/asamk/Signal org\&.asamk\&.Signal\&.sendMessage string:"Message text goes here" array:string: string:+123456789
+.RE
+.PP
+Send a group message
+.RS 4
+dbus\-send \-\-session \-\-print\-reply \-\-type=method_call \-\-dest=org\&.asamk\&.Signal /org/asamk/Signal org\&.asamk\&.Signal\&.sendGroupMessage string:\*(AqThe message goes here\*(Aq array:string:\*(Aq/path/to/attachmnt1\*(Aq,\fI/path/to/attachmnt2\fR
+array:byte:139,22,72,247,116,32,170,104,205,164,207,21,248,77,185
+.RE
+.PP
+Print the group name corresponding to a groupId; the daemon runs on system bus, and was started without an explicit \-u USERNAME
+.RS 4
+dbus\-send \-\-system \-\-print\-reply \-\-type=method_call \-\-dest=\fIorg\&.asamk\&.Signal\fR
+/org/asamk/Signal/_1234567890 org\&.asamk\&.Signal\&.getGroupName array:byte:139,22,72,247,116,32,170,104,205,164,207,21,248,77,185
+.RE
+.PP
+Same as above, but daemon running on the session bus
+.RS 4
+dbus\-send \-\-session \-\-print\-reply \-\-type=method_call \-\-dest=\fIorg\&.asamk\&.Signal\fR
+/org/asamk/Signal/_1234567890 org\&.asamk\&.Signal\&.getGroupName array:byte:139,22,72,247,116,32,170,104,205,164,207,21,248,77,185
+.RE
+.PP
+Display a QR code for linking from a smartphone
+.RS 4
+dbus\-send \-\-session \-\-type=method_call \-\-print\-reply \-\-dest="org\&.asamk\&.Signal" /org/asamk/Signal org\&.asamk\&.Signal\&.linkAndDisplay string:"echo {}|qrencode \-s10 \-o \-|feh \-" string:"My New Client"
+.RE
+.SH "AUTHORS"
+.sp
+Maintained by AsamK <asamk@gmx\&.de>, who is assisted by other open source contributors\&. For more information about signal\-cli development, see https://github\&.com/AsamK/signal\-cli\&.
