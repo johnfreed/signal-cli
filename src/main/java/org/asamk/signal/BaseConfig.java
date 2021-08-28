@@ -9,7 +9,7 @@ public class BaseConfig {
     final static String USER_AGENT_SIGNAL_CLI = PROJECT_NAME == null
             ? "signal-cli"
             : PROJECT_NAME + "/" + PROJECT_VERSION;
-    public final static String USER_AGENT = USER_AGENT_SIGNAL_ANDROID + " " + USER_AGENT_SIGNAL_CLI;
+    final static String USER_AGENT = USER_AGENT_SIGNAL_ANDROID + " " + USER_AGENT_SIGNAL_CLI;
 
     private BaseConfig() {
     }

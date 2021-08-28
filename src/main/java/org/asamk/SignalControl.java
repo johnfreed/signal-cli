@@ -16,28 +16,28 @@ public interface SignalControl extends DBusInterface {
 
     List<DBusPath> listAccounts();
 
-    String link() throws SignalControl.Error.Failure;
+    String link() throws Error.Failure;
 
-    String link(String newDeviceName) throws SignalControl.Error.Failure;
+    String link(String newDeviceName) throws Error.Failure;
 
-    void linkAndDisplay() throws SignalControl.Error.Failure;
-    void linkAndDisplay(String newDeviceName) throws SignalControl.Error.Failure;
+    void linkAndDisplay() throws Error.Failure;
+    void linkAndDisplay(String newDeviceName) throws Error.Failure;
 
     void register(
             String number, boolean voiceVerification
-    ) throws SignalControl.Error.Failure, SignalControl.Error.InvalidNumber, SignalControl.Error.RequiresCaptcha;
+    ) throws Error.Failure, Error.InvalidNumber, Error.RequiresCaptcha;
 
     void registerWithCaptcha(
-            final String number, final boolean voiceVerification, final String captcha
-    ) throws SignalControl.Error.Failure, SignalControl.Error.InvalidNumber, SignalControl.Error.RequiresCaptcha;
+            String number, boolean voiceVerification, String captcha
+    ) throws Error.Failure, Error.InvalidNumber, Error.RequiresCaptcha;
 
-    void verify(String number, String verificationCode) throws SignalControl.Error.Failure, SignalControl.Error.InvalidNumber;
+    void verify(String number, String verificationCode) throws Error.Failure, Error.InvalidNumber;
 
-    void verifyWithPin(String number, String verificationCode, String pin) throws SignalControl.Error.Failure, SignalControl.Error.InvalidNumber;
+    void verifyWithPin(String number, String verificationCode, String pin) throws Error.Failure, Error.InvalidNumber;
 
     String version();
 
-    void listen(String number) throws SignalControl.Error.Failure;
+    void listen(String number) throws Error.Failure;
 
     interface Error {
 

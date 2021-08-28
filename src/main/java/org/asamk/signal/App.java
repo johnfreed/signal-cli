@@ -199,9 +199,9 @@ public class App {
         }
 
         handleLocalCommand((LocalCommand) command,
-        		username,
-        		settingsPath,
-        		serviceEnvironment,
+                username,
+                settingsPath,
+                serviceEnvironment,
                 outputWriter,
                 trustNewIdentity);
     }
@@ -331,7 +331,7 @@ public class App {
 
         };
 
-    	Manager manager = null;
+        Manager manager = null;
         try {
             manager = loadManager(username, settingsPath, serviceEnvironment, trustNewIdentity);
         } catch (CommandException e) {

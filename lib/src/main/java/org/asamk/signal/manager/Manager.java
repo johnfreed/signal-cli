@@ -243,9 +243,6 @@ public class Manager implements Closeable {
                 jobExecutor);
     }
 
-    public SendHelper getSendHelper() {
-    	return sendHelper;
-    }
     public PathConfig getPathConfig() {
         return pathConfig;
     }
@@ -278,8 +275,8 @@ public class Manager implements Closeable {
         if (!SignalAccount.userExists(pathConfig.getDataPath(), username)) {
             throw new NotRegisteredException();
         }
-
-        var account = SignalAccount.load(pathConfig.getDataPath(), username, true, trustNewIdentity);
+        //exit, don't wait, if account is in use
+        var account = SignalAccount.load(pathConfig.getDataPath(), username, false, trustNewIdentity);
 
         if (!account.isRegistered()) {
             throw new NotRegisteredException();
@@ -815,7 +812,7 @@ public class Manager implements Closeable {
         final var number = address.getNumber().get();
         Map<String, UUID> uuidMap = null;
         try {
-            uuidMap = getRegisteredUsers(Set.of(number));        	
+            uuidMap = getRegisteredUsers(Set.of(number));
         } catch (InvalidNumberException e) {
             logger.warn("List of users contains invalid number, ignoring: {}", e.getMessage());
         }

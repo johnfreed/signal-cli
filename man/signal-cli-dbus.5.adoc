@@ -41,11 +41,11 @@ Exceptions are the names of the Java Exceptions returned in the body field. They
 
 Phone numbers always have the format +<countrycode><regional number>
 
-== Methods 
+== Methods
 
 === Control methods
 
-Note that these methods are directed to org/asamk/Signal and not to any individual account. Only `version()` is activated in single-user mode; the rest are disabled. 
+Note that these methods are directed to org/asamk/Signal and not to any individual account. Only `version()` is activated in single-user mode; the rest are disabled.
 
 link() -> deviceLinkUri<s>::
 link(newDeviceName<s>) -> deviceLinkUri<s>::
@@ -66,7 +66,7 @@ Exception: Failure
 listAccounts() -> <accountList<as>>::
 * accountList : Array of all accounts attached to this DBus
 
-Exceptions: None 
+Exceptions: None
 
 listen(number<s>) -> <>::
 * number            : Phone number
@@ -362,7 +362,7 @@ sendEndSessionMessage(recipients<as>) -> <>::
 * recipients : String array of phone numbers
 
 Ends (resets) the Signal secure session with recipients.
- 
+
 Exceptions: Failure, InvalidNumber, UntrustedIdentity
 
 sendMessage(message<s>, attachments<as>, recipient<s>) -> timestamp<x>::

@@ -278,7 +278,7 @@ public class DbusSignalImpl implements Signal {
         } catch (IOException e) {
             throw new Error.Failure(e.getMessage());
         } catch (GroupNotFoundException | NotAGroupMemberException | GroupSendingNotAllowedException e) {
-        	throw new Error.GroupNotFound(e.getMessage());
+            throw new Error.GroupNotFound(e.getMessage());
         }
     }
 
@@ -793,22 +793,14 @@ public class DbusSignalImpl implements Signal {
                 avatarFile = null;
             } else {
                 avatarFile = new File(avatar);
-                //check if we are sending an empty file. If so, this tells Signal
-                // to delete the avatar, and we will delete it from the local AvatarStore
+                //TODO: check if we are sending an empty file. If so, this tells Signal
+                // to delete the avatar, so we should delete it from the local AvatarStore
                 long fileSize = avatarFile.length();
                 if (fileSize == 0) {
                     try {
-                        GroupInfo group = null;
-                        try {
-                            group = m.getGroup(getGroupId(groupId));
-                        } catch (AssertionError ae) {
-                            throw new Error.Failure(ae.getMessage());
+                        if (avatarFile.exists()) {
+                            Files.delete(avatarFile.toPath());
                         }
-                        if (group == null) {
-                            throw new Error.InvalidGroupId("GroupId is null.");
-                        }
-
-                        AvatarStore.deleteGroupAvatar(group.getGroupId());
                     } catch (IOException e) {
                         throw new Error.Failure(e.getMessage());
                     }

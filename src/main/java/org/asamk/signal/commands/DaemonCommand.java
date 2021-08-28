@@ -69,8 +69,10 @@ public class DaemonCommand implements MultiLocalCommand {
     }
 
     @Override
-    public void handleCommand(final Namespace ns, final Manager m, final OutputWriter outputWriter) throws CommandException {
-    	handleCommand(ns, m, null, outputWriter, null);
+    public void handleCommand(
+            final Namespace ns, final Manager m, final OutputWriter outputWriter
+    ) throws CommandException {
+        handleCommand(ns, m, null, outputWriter, null);
     }
 
     @Override

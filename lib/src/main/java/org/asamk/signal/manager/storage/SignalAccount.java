@@ -704,8 +704,13 @@ public class SignalAccount implements Closeable {
         var fileChannel = new RandomAccessFile(fileName, "rw").getChannel();
         var lock = fileChannel.tryLock();
         if (lock == null) {
-            logger.debug("Config file is in use by another instance.");
-            throw new IOException("Config file is in use by another instance.");
+            if (!waitForLock) {
+                logger.debug("Config file is in use by another instance.");
+                throw new IOException("Config file is in use by another instance.");
+            }
+            logger.info("Config file is in use by another instance, waiting…");
+            lock = fileChannel.lock();
+            logger.info("Config file lock acquired.");
         }
         return new Pair<>(fileChannel, lock);
     }
