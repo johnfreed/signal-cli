@@ -7,7 +7,6 @@ import org.asamk.signal.commands.exceptions.CommandException;
 import org.asamk.signal.manager.Manager;
 import org.asamk.signal.manager.storage.identities.TrustNewIdentity;
 
-
 import java.util.List;
 
 public interface MultiLocalCommand extends LocalCommand {

@@ -1,36 +1,11 @@
 package org.asamk;
 
-import org.asamk.Signal.Error;
-import org.asamk.signal.DbusConfig;
-import org.asamk.signal.commands.exceptions.IOErrorException;
-import org.asamk.signal.commands.exceptions.UnexpectedErrorException;
-import org.asamk.signal.commands.exceptions.UserErrorException;
-import org.asamk.signal.manager.AvatarStore;
-import org.asamk.signal.manager.api.TypingAction;
-import org.asamk.signal.manager.groups.GroupId;
-import org.asamk.signal.manager.groups.GroupIdFormatException;
-import org.asamk.signal.manager.groups.GroupNotFoundException;
-import org.asamk.signal.manager.groups.NotAGroupMemberException;
-import org.asamk.signal.util.Util;
 import org.freedesktop.dbus.exceptions.DBusException;
 import org.freedesktop.dbus.exceptions.DBusExecutionException;
 import org.freedesktop.dbus.interfaces.DBusInterface;
 import org.freedesktop.dbus.messages.DBusSignal;
-import org.whispersystems.libsignal.InvalidKeyException;
-import org.whispersystems.libsignal.util.guava.Optional;
-import org.whispersystems.signalservice.api.crypto.UntrustedIdentityException;
-import org.whispersystems.signalservice.api.util.InvalidNumberException;
-import org.whispersystems.signalservice.internal.contacts.crypto.UnauthenticatedResponseException;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 
 /**
  * DBus interface for the org.asamk.Signal service.

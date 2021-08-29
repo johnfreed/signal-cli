@@ -27,11 +27,9 @@ import org.asamk.signal.commands.exceptions.UnexpectedErrorException;
 import org.asamk.signal.commands.exceptions.UntrustedKeyErrorException;
 import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.manager.LibSignalLogger;
-import org.asamk.signal.manager.config.ServiceEnvironment;
 import org.asamk.signal.util.SecurityProvider;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
-import java.io.File;
 import java.security.Security;
 
 public class Main {

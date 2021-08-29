@@ -1,8 +1,6 @@
 package org.asamk.signal.dbus;
 
-import org.asamk.Signal;
 import org.asamk.SignalControl;
-import org.asamk.Signal.Error;
 import org.asamk.signal.App;
 import org.asamk.signal.BaseConfig;
 import org.asamk.signal.DbusConfig;
@@ -13,93 +11,39 @@ import org.asamk.signal.OutputWriter;
 import org.asamk.signal.PlainTextWriter;
 import org.asamk.signal.commands.DaemonCommand;
 import org.asamk.signal.commands.SignalCreator;
-import org.asamk.signal.commands.UpdateGroupCommand;
 import org.asamk.signal.commands.exceptions.CommandException;
-import org.asamk.signal.commands.exceptions.IOErrorException;
-import org.asamk.signal.commands.exceptions.UnexpectedErrorException;
-import org.asamk.signal.commands.exceptions.UserErrorException;
-import org.asamk.signal.dbus.DbusSignalImpl;
-import org.asamk.signal.dbus.StreamGobbler;
-import org.asamk.signal.manager.AttachmentInvalidException;
-import org.asamk.signal.manager.AvatarStore;
 import org.asamk.signal.manager.Manager;
-import org.asamk.signal.manager.NotMasterDeviceException;
-import org.asamk.signal.manager.NotRegisteredException;
-import org.asamk.signal.manager.PathConfig;
 import org.asamk.signal.manager.ProvisioningManager;
 import org.asamk.signal.manager.RegistrationManager;
-import org.asamk.signal.manager.StickerPackInvalidException;
 import org.asamk.signal.manager.UserAlreadyExists;
-import org.asamk.signal.manager.api.Device;
-import org.asamk.signal.manager.api.TypingAction;
-import org.asamk.signal.manager.config.ServiceConfig;
 import org.asamk.signal.manager.config.ServiceEnvironment;
-import org.asamk.signal.manager.groups.GroupId;
-import org.asamk.signal.manager.groups.GroupIdFormatException;
-import org.asamk.signal.manager.groups.GroupInviteLinkUrl;
-import org.asamk.signal.manager.groups.GroupNotFoundException;
-import org.asamk.signal.manager.groups.LastGroupAdminException;
-import org.asamk.signal.manager.groups.NotAGroupMemberException;
-import org.asamk.signal.manager.storage.groups.GroupInfo;
-import org.asamk.signal.manager.storage.identities.IdentityInfo;
 import org.asamk.signal.manager.storage.identities.TrustNewIdentity;
-import org.asamk.signal.util.ErrorUtils;
-import org.asamk.signal.util.Hex;
-import org.asamk.signal.util.Util;
+
 import org.freedesktop.dbus.DBusPath;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusException;
-import org.freedesktop.dbus.exceptions.DBusExecutionException;
-import org.freedesktop.dbus.interfaces.DBusInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.whispersystems.libsignal.InvalidKeyException;
 import org.whispersystems.libsignal.util.Pair;
-import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.api.KeyBackupServicePinException;
 import org.whispersystems.signalservice.api.KeyBackupSystemNoDataException;
-import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 import org.whispersystems.signalservice.api.push.exceptions.CaptchaRequiredException;
-import org.whispersystems.signalservice.api.util.InvalidNumberException;
-import org.whispersystems.signalservice.internal.contacts.crypto.UnauthenticatedResponseException;
-import org.whispersystems.signalservice.api.SignalServiceAccountManager;
-import org.whispersystems.signalservice.api.SignalSessionLock;
-import org.whispersystems.signalservice.api.crypto.UntrustedIdentityException;
-import org.whispersystems.signalservice.api.groupsv2.GroupLinkNotActiveException;
-import org.whispersystems.signalservice.api.messages.SendMessageResult;
 
-import static org.asamk.signal.util.Util.getLegacyIdentifier;
-
-
-import java.io.InputStreamReader;
 import java.io.BufferedReader;
-import java.io.InputStream;
-import java.util.function.Consumer;
-
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.channels.OverlappingFileLockException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Base64;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class DbusSignalControlImpl implements org.asamk.SignalControl {
 

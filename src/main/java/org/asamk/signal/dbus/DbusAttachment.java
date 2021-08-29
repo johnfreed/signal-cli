@@ -1,23 +1,14 @@
 package org.asamk.signal.dbus;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
-import org.whispersystems.libsignal.util.guava.Optional;
-import org.whispersystems.signalservice.api.messages.SignalServiceAttachment;
-import org.whispersystems.signalservice.api.messages.SignalServiceAttachmentPointer;
-import org.whispersystems.signalservice.api.util.StreamDetails;
-import org.freedesktop.dbus.exceptions.DBusException;
-import org.freedesktop.dbus.annotations.Position;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
-import java.net.URLConnection;
-
 import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.manager.util.Utils;
 import org.freedesktop.dbus.Struct;
+import org.freedesktop.dbus.annotations.Position;
+import org.whispersystems.signalservice.api.messages.SignalServiceAttachment;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URL;
 
 public final class DbusAttachment extends Struct
 {

@@ -1,8 +1,6 @@
 package org.asamk;
 
-import org.asamk.Signal.Error;
 import org.freedesktop.dbus.DBusPath;
-import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusExecutionException;
 import org.freedesktop.dbus.interfaces.DBusInterface;
 

@@ -1221,6 +1221,7 @@ public class Manager implements Closeable {
 
     private void close(boolean closeAccount) throws IOException {
         executor.shutdown();
+
         dependencies.getSignalWebSocket().disconnect();
 
         if (closeAccount && account != null) {
