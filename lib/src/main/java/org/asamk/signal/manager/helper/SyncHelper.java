@@ -271,8 +271,8 @@ public class SyncHelper {
             try {
                 c = s.read();
             } catch (IOException e) {
-                logger.warn("Sync contacts contained invalid contact, ignoring: {}", e.getMessage());
-                continue;
+                logger.warn("Sync contacts contained invalid contact, might need to resync: {}", e.getMessage());
+                break;
             }
             if (c == null) {
                 break;
