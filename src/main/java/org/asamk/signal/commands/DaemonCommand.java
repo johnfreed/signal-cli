@@ -83,6 +83,20 @@ public class DaemonCommand implements MultiLocalCommand {
         this.dBusType = busType;
         this.trustNewIdentity = trustNewIdentity;
         this.outputWriter = outputWriter;
+        if (System.getProperty("os.name").toLowerCase().startsWith("mac ")) {
+            String dBusVar = System.getenv("DBUS_LAUNCHD_SESSION_BUS_SOCKET");
+
+            if (dBusVar == null || dBusVar.isBlank()) {
+                String message = "\n\n" +
+                        "*************************************" +
+                        "\n\nDBUS_LAUNCHD_SESSION_BUS_SOCKET is not set. Issue the command:\n\n" +
+                        "export DBUS_LAUNCHD_SESSION_BUS_SOCKET=$(launchctl getenv DBUS_LAUNCHD_SESSION_BUS_SOCKET)\n" +
+                        "\nand then try again.\n\n" +
+                        "*************************************";
+                throw new UserErrorException(message);
+            }
+        }
+
         try (var conn = DBusConnection.getConnection(busType)) {
             var objectPath = DbusConfig.getObjectPath();
             var t = run(conn, objectPath, m, outputWriter, ignoreAttachments);
@@ -116,6 +130,20 @@ public class DaemonCommand implements MultiLocalCommand {
         this.dBusType = busType;
         this.trustNewIdentity = trustNewIdentity;
         this.outputWriter = outputWriter;
+        if (System.getProperty("os.name").toLowerCase().startsWith("mac ")) {
+            String dBusVar = System.getenv("DBUS_LAUNCHD_SESSION_BUS_SOCKET");
+
+            if (dBusVar == null || dBusVar.isBlank()) {
+                String message = "\n\n" +
+                        "*************************************" +
+                        "\n\nDBUS_LAUNCHD_SESSION_BUS_SOCKET is not set. Issue the command:\n\n" +
+                        "export DBUS_LAUNCHD_SESSION_BUS_SOCKET=$(launchctl getenv DBUS_LAUNCHD_SESSION_BUS_SOCKET)\n" +
+                        "\nand then try again.\n\n" +
+                        "*************************************";
+                throw new UserErrorException(message);
+            }
+        }
+
         try (var conn = DBusConnection.getConnection(busType)) {
             final var signalControl = new DbusSignalControlImpl(c, m -> {
                 try {
@@ -135,6 +163,10 @@ public class DaemonCommand implements MultiLocalCommand {
             if (daemonUsernames == null) {
                 //--number option was not given, so add all local usernames to signalControl
                 daemonUsernames = Manager.getAllLocalUsernames(settingsPath);
+                if (daemonUsernames.size() == 0) {
+                    logger.error("No users are registered yet.");
+                    throw new UserErrorException("No users are registered yet. Try again with signal-cli daemon --number");
+                }
             }
 
             //legitimate to call daemon --number with no numbers
