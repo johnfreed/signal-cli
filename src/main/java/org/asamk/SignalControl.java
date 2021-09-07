@@ -18,9 +18,6 @@ public interface SignalControl extends DBusInterface {
 
     String link(String newDeviceName) throws Error.Failure;
 
-    void linkAndDisplay() throws Error.Failure;
-    void linkAndDisplay(String newDeviceName) throws Error.Failure;
-
     void register(
             String number, boolean voiceVerification
     ) throws Error.Failure, Error.InvalidNumber, Error.RequiresCaptcha;

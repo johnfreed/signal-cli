@@ -165,37 +165,6 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
     }
 
     @Override
-    public void linkAndDisplay() {
-        linkAndDisplay();
-    }
-
-    @Override
-    public void linkAndDisplay(String newDeviceName) {
-        try
-        {
-            if (newDeviceName == null) {newDeviceName = "cli";}
-            String tscode = link(newDeviceName);
-            tscode = "\"" + tscode + "\"";
-               boolean isWindows = System.getProperty("os.name")
-                    .toLowerCase().startsWith("windows");
-               tscode = tscode.replaceAll("\\{\\}", tscode);
-               String command = "echo " + tscode + "|qrencode -s10 -o -|display -";
-            ProcessBuilder builder = new ProcessBuilder();
-            if (isWindows) {
-                builder.command("cmd.exe", "/c", command);
-            } else {
-                builder.command("sh", "-c", command);
-            }
-            builder.directory(new File(System.getProperty("user.home")));
-            Process process = builder.start();
-            StreamGobbler streamGobbler = new StreamGobbler(process.getInputStream(), System.out::println);
-            Executors.newSingleThreadExecutor().submit(streamGobbler);
-        } catch (IOException e) {
-            throw new SignalControl.Error.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
-        }
-    }
-
-    @Override
     public String link(final String newDeviceName) {
         try {
             final ProvisioningManager provisioningManager = c.getNewProvisioningManager();
