@@ -52,8 +52,8 @@ public class DaemonCommand implements MultiLocalCommand {
         subparser.addArgument("--ignore-attachments")
                 .help("Don’t download attachments of received messages.")
                 .action(Arguments.storeTrue());
-        subparser.addArgument("--number").help("Phone number").nargs("*")
-                .help("List of number(s) to attach to anonymous daemon (default=all)");
+        subparser.addArgument("--number", "--numbers").help("Phone numbers").nargs("*")
+                .help("List of zero or more numbers for anonymous daemon to listen to (default=all)");
 
     }
 
@@ -161,15 +161,15 @@ public class DaemonCommand implements MultiLocalCommand {
             ServiceEnvironment serviceEnvironment = c.getServiceEnvironment();
 
             if (daemonUsernames == null) {
-                //--number option was not given, so add all local usernames to signalControl
+                //--numbers option was not given, so add all local usernames to signalControl
                 daemonUsernames = Manager.getAllLocalUsernames(settingsPath);
                 if (daemonUsernames.size() == 0) {
                     logger.error("No users are registered yet.");
-                    throw new UserErrorException("No users are registered yet. Try again with signal-cli daemon --number");
+                    throw new UserErrorException("No users are registered yet. Try again with signal-cli daemon --numbers");
                 }
             }
 
-            //legitimate to call daemon --number with no numbers
+            //legitimate to call daemon --numbers with no numbers
             for (String u : daemonUsernames) {
                 try {
                     managers.add(App.loadManager(u, settingsPath, serviceEnvironment, trustNewIdentity));

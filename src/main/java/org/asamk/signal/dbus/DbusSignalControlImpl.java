@@ -153,11 +153,10 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
         try (final RegistrationManager registrationManager = c.getNewRegistrationManager(number)) {
             final Manager manager = registrationManager.verifyAccount(verificationCode, pin);
             logger.info("Registration of " + number + " verified");
-            manager.close();
+            addManager(manager);
         } catch (IOException | KeyBackupSystemNoDataException | KeyBackupServicePinException e) {
             throw new SignalControl.Error.Failure(e.getClass().getSimpleName() + " " + e.getMessage());
         }
-        listen(number);
     }
 
     @Override
@@ -175,7 +174,6 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
                     final Manager manager = provisioningManager.finishDeviceLink(newDeviceName);
                     logger.info("Linking of " + newDeviceName + " successful");
                     addManager(manager);
-                    listen(manager.getUsername());
                 } catch (TimeoutException e) {
                     throw new SignalControl.Error.Failure(e.getClass().getSimpleName() + ": Link request timed out, please try again.");
                 } catch (IOException e) {

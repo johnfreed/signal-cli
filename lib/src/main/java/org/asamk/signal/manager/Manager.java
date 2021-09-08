@@ -247,6 +247,10 @@ public class Manager implements Closeable {
         return pathConfig;
     }
 
+    public SignalAccount getAccount() {
+        return account;
+    }
+
     public String getUsername() {
         return account.getUsername();
     }

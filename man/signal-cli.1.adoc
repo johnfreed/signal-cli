@@ -494,16 +494,18 @@ The required manifest.json has the following format:
 PATH::
 The path of the manifest.json or a zip file in the same directory containing the sticker pack you wish to upload.
 
-=== daemon [--system] [--ignore-attachments]
+=== daemon [--system] [--ignore-attachments] [--numbers]
 
-signal-cli can run in daemon mode and provides an experimental dbus interface.
-If no `-u` username is given, all local users will be exported as separate dbus
-objects under the same bus name.
+`signal-cli` can run in daemon mode and provides an experimental DBus interface.
+If no `-u` username is given, zero or more users as specified by the `--numbers`
+option (default is all) will be exported as separate DBus objects under the same bus name.
 
 *--system*::
-Use DBus system bus instead of user bus.
+Use DBus system bus instead of session bus.
 *--ignore-attachments*::
 Don’t download attachments of received messages.
+*--numbers*::
+List of phone number(s) for anonymous daemon to listen to (default=all).
 
 == Examples
 

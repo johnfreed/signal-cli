@@ -705,8 +705,8 @@ public class SignalAccount implements Closeable {
         var lock = fileChannel.tryLock();
         if (lock == null) {
             if (!waitForLock) {
-                logger.debug("Config file is in use by another instance.");
-                throw new IOException("Config file is in use by another instance.");
+                logger.debug("User already listening on another bus.");
+                throw new IOException("User already listening on another bus.");
             }
             logger.info("Config file is in use by another instance, waiting…");
             lock = fileChannel.lock();

@@ -372,6 +372,13 @@ public class App {
         try {
             manager.checkAccountState();
         } catch (IOException e) {
+            /*    In case account isn't registered on Signal servers, close it locally,
+             *    thus removing the FileLock so another daemon can get it.
+             */
+            try {
+                manager.getAccount().close();
+            } catch (IOException ignore) {
+            }
             throw new UnexpectedErrorException("Error while checking account " + username + ": " + e.getMessage());
         }
 
