@@ -509,9 +509,10 @@ Unregisters the current device. In single-user mode, kills the daemon.
 
 Exception: Failure
 
-updateAccount() -> <>::
+updateAccount(deviceName<s>) -> <>::
+* deviceName : New name 
 
-Updates the account attributes on the Signal server.
+Set a new name for this device (main or linked).
 
 Exception: Failure
 

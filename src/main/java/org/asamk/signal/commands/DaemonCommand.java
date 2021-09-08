@@ -111,7 +111,7 @@ public class DaemonCommand implements MultiLocalCommand {
             throw new UserErrorException("Dbus command failed, daemon already started on this bus.");
         } catch (IOException e) {
             logger.error("Dbus command failed", e);
-            throw new IOErrorException("Dbus command failed");
+            throw new IOErrorException("Dbus command failed", e);
         }
     }
 

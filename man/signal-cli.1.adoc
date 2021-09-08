@@ -105,13 +105,13 @@ have to be readded to each group.
 
 CAUTION: Only delete your account if you won't use this number again!
 
-=== updateAccount [-n|--device-name NAME]
+=== updateAccount -n|--device-name NAME
 
-Update the account attributes on the signal server.
+Update the device name on the Signal servers.
 Can fix problems with receiving messages.
 
 *-n* NAME, *--device-name* NAME::
-Set a new device name for the main or linked device
+Set a new device name for the main or linked device.
 
 === setPin REGISTRATION_LOCK_PIN
 
@@ -166,7 +166,7 @@ NUMBER [NUMBER ...]::
 One or more numbers to check.
 
 === send RECIPIENT [RECIPIENT ...] [-m|--message MESSAGE] [-a|--attachment ATTACHMENT [ATTACHMENT ...]]
-=== send -g|--group-id GROUP [GROUP ...] [-m|--message MESSAGE] [-a|--attachment ATTACHMENT [ATTACHMENT ...]] 
+=== send -g|--group-id GROUP [GROUP ...] [-m|--message MESSAGE] [-a|--attachment ATTACHMENT [ATTACHMENT ...]]
 === send --note-to-self [-m|--message MESSAGE] [-a|--attachment ATTACHMENT [ATTACHMENT ...]]
 === send -e|--end-session
 
@@ -246,7 +246,7 @@ Specify phone number(s) of recipient(s).
 Specify group identifier(s) in base64 encoding.
 
 *-s*, *--stop*::
-Send a typing STOP message. 
+Send a typing STOP message.
 
 === remoteDelete RECIPIENT [RECIPIENT ...] -t|--target-timestamp TIMESTAMP
 === remoteDelete -g|--group-id GROUP [GROUP ...] -t|--target-timestamp TIMESTAMP

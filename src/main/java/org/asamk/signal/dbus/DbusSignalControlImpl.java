@@ -215,7 +215,7 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
             ServiceEnvironment serviceEnvironment = c.getServiceEnvironment();
             TrustNewIdentity trustNewIdentity = DaemonCommand.trustNewIdentity;
 
-        	//create new manager for this number
+            //create new manager for this number
             final Manager m = App.loadManager(number, settingsPath, serviceEnvironment, trustNewIdentity);
             addManager(m);
             final var thread = new Thread(() -> {

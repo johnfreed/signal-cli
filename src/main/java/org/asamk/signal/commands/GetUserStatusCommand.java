@@ -46,8 +46,6 @@ public class GetUserStatusCommand implements JsonRpcLocalCommand {
         } catch (IOException e) {
             logger.debug("Unable to check if users are registered", e);
             throw new IOErrorException("Unable to check if users are registered", e);
-        } catch (InvalidNumberException e) {
-            logger.debug("Invalid number format", e);
         }
 
         // Output

@@ -20,8 +20,7 @@ public final class DbusMention extends Struct {
     public final int length;
 
     public DbusMention(SignalServiceDataMessage.Mention mention, Manager m) {
-        this.name = getLegacyIdentifier(m.resolveSignalServiceAddress(new SignalServiceAddress(mention.getUuid(),
-                null)));
+        this.name = getLegacyIdentifier(m.resolveSignalServiceAddress(new SignalServiceAddress(mention.getUuid())));
         this.start = mention.getStart();
         this.length = mention.getLength();
     }

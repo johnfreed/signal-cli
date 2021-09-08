@@ -89,9 +89,9 @@ public class DbusSignalImpl implements Signal {
     }
 
     @Override
-    public void updateAccount() {
+    public void updateAccount(String deviceName) {
         try {
-            m.updateAccountAttributes();
+            m.updateAccountAttributes(deviceName);
         } catch (IOException | Signal.Error.Failure e) {
             throw new Error.Failure("UpdateAccount error: " + e.getMessage());
         }

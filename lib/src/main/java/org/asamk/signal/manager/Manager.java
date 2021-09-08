@@ -336,7 +336,7 @@ public class Manager implements Closeable {
      * @return A map of numbers to canonicalized number and uuid. If a number is not registered the uuid is null.
      * @throws IOException if its unable to get the contacts to check if they're registered
      */
-    public Map<String, Pair<String, UUID>> areUsersRegistered(Set<String> numbers) throws IOException, InvalidNumberException {
+    public Map<String, Pair<String, UUID>> areUsersRegistered(Set<String> numbers) throws IOException {
         Map<String, String> canonicalizedNumbers = numbers.stream().collect(Collectors.toMap(n -> n, n -> {
             try {
                 return PhoneNumberFormatter.formatNumber(n, account.getUsername());
@@ -802,7 +802,7 @@ public class Manager implements Closeable {
         final Map<String, UUID> uuidMap;
         try {
             uuidMap = getRegisteredUsers(Set.of(number));
-        } catch (NumberFormatException | InvalidNumberException e) {
+        } catch (NumberFormatException e) {
             throw new UnregisteredUserException(number, e);
         }
         final var uuid = uuidMap.get(number);
@@ -812,7 +812,7 @@ public class Manager implements Closeable {
         return uuid;
     }
 
-    private Map<String, UUID> getRegisteredUsers(final Set<String> numbers) throws IOException, InvalidNumberException {
+    private Map<String, UUID> getRegisteredUsers(final Set<String> numbers) throws IOException {
         Map<String, UUID> registeredUsers;
         try {
             registeredUsers = dependencies.getAccountManager()
@@ -826,7 +826,7 @@ public class Manager implements Closeable {
          * in the package org.whispersystems.signalservice.api
          */
         } catch (NumberFormatException e) {
-            throw new InvalidNumberException(e.getMessage());
+            throw new UnregisteredUserException(e.getMessage(), e);
         }
 
         // Store numbers as recipients so we have the number/uuid association
