@@ -290,7 +290,7 @@ public class Manager implements Closeable {
     public static List<String> getAllLocalUsernames(File settingsPath) {
         var pathConfig = PathConfig.createDefault(settingsPath);
         final var dataPath = pathConfig.getDataPath();
-        final var files = dataPath.listFiles();
+        final File[] files = dataPath.listFiles();
 
         if (files == null) {
             return List.of();

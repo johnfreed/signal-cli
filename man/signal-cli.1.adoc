@@ -11,7 +11,7 @@ signal-cli - A commandline and dbus interface for the Signal messenger
 
 == Synopsis
 
-*signal-cli* [--config CONFIG] [-h | -v | -u USERNAME | --dbus | --dbus-system] command [command-options]
+*signal-cli* [--config CONFIG] [-h | -v | -u USERNAME | --dbus | --dbus-system] subcommand [subcommand-options] [subcommand-arguments]
 
 == Description
 
@@ -65,23 +65,23 @@ Choose when to trust new identities:
 - `always`: Trust any new identity key without verification
 - `never`: Don't trust any unknown identity key, every key must be verified manually
 
-== Commands
+== Subcommands
 
-=== register
+=== register [-v|--voice] [--captcha CAPTCHA]
 
 Register a phone number with SMS or voice verification.
-Use the verify command to complete the verification.
+Use the `verify` command to complete the verification.
 
 *-v*, *--voice*::
 The verification should be done over voice, not SMS.
 
 *--captcha*::
-The captcha token, required if registration failed with a captcha required error.
+Specify the CAPTCHA token, required if registration failed with a "captcha required" error.
 To get the token, go to https://signalcaptchas.org/registration/generate.html
 Check the developer tools for a redirect starting with signalcaptcha://
 Everything after signalcaptcha:// is the captcha token.
 
-=== verify
+=== verify [-p PIN|--pin PIN] VERIFICATIONCODE
 
 Verify the number using the code received via SMS or voice.
 
@@ -92,7 +92,7 @@ The verification code.
 The registration lock PIN, that was set by the user.
 Only required if a PIN was set.
 
-=== unregister
+=== unregister [--delete-account]
 
 Disable push support for this device, i.e. this device won't receive any more messages.
 If this is the primary device, other users can't send messages to this number anymore.
@@ -110,7 +110,7 @@ CAUTION: Only delete your account if you won't use this number again!
 Update the account attributes on the signal server.
 Can fix problems with receiving messages.
 
-=== setPin
+=== setPin REGISTRATION_LOCK_PIN
 
 Set a registration lock pin, to prevent others from registering this number.
 
@@ -121,30 +121,30 @@ The registration lock PIN, that will be required for new registrations (resets a
 
 Remove the registration lock pin.
 
-=== link
+=== link [-n NAME|--name NAME]
 
 Link to an existing device, instead of registering a new number.
 This shows a "tsdevice:/…" URI. If you want to connect to another signal-cli instance, you can just use this URI.
 If you want to link to an Android/iOS device, create a QR code with the URI (e.g. with qrencode) and scan that in the Signal app.
 
 *-n* NAME, *--name* NAME::
-Optionally specify a name to describe this new device.
-By default "cli" will be used.
+Optionally specify a NAME to describe this new device.
+By default `cli` will be used.
 
-=== addDevice
+=== addDevice --uri URI
 
 Link another device to this device.
 Only works if this is the primary device.
 
 *--uri* URI::
-Specify the uri contained in the QR code shown by the new device.
-You will need the full uri enclosed in quotation marks, such as "tsdevice:/?uuid=....."
+Specify the URI contained in the QR code shown by the new device.
+You will need the full URI enclosed in quotation marks, such as "tsdevice:/?uuid=....."
 
 === listDevices
 
 Show a list of linked devices.
 
-=== removeDevice
+=== removeDevice -d|--device-id DEVICE_ID
 
 Remove a linked device.
 Only works if this is the primary device.
@@ -153,29 +153,34 @@ Only works if this is the primary device.
 Specify the device you want to remove.
 Use listDevices to see the deviceIds.
 
-=== getUserStatus
+=== getUserStatus NUMBER [NUMBER ...]
 
 Uses a list of phone numbers to determine the statuses of those users.
 Shows if they are registered on the Signal Servers or not.
 In json mode this is outputted as a list of objects.
 
-[NUMBER [NUMBER ...]]::
+NUMBER [NUMBER ...]::
 One or more numbers to check.
 
-=== send
+=== send RECIPIENT [RECIPIENT ...] [-m|--message MESSAGE] [-a|--attachment ATTACHMENT [ATTACHMENT ...]]
+=== send -g|--group-id GROUP [GROUP ...] [-m|--message MESSAGE] [-a|--attachment ATTACHMENT [ATTACHMENT ...]] 
+=== send --note-to-self [-m|--message MESSAGE] [-a|--attachment ATTACHMENT [ATTACHMENT ...]]
+=== send -e|--end-session
 
-Send a message to another user or group.
+Send a message to users or groups. If *-m|--message* is omitted, reads *MESSAGE* from standard input.
+Destinations may be in the form of one or more *RECIPIENT* phone numbers, or one or more *GROUP* identifiers
+(preceded by the *-g|--group-id* option), but they may not be mixed.
 
-RECIPIENT::
-Specify the recipients’ phone number.
+RECIPIENT [RECIPIENT ...]::
+Specify phone number(s) of recipient(s).
 
-*-g* GROUP, *--group-id* GROUP::
-Specify the recipient group ID in base64 encoding.
+*-g* GROUP [GROUP ...], *--group-id* GROUP [GROUP ...]::
+Specify recipient group ID(s) in base64 encoding.
 
 *-m* MESSAGE, *--message* MESSAGE::
-Specify the message, if missing, standard input is used.
+Specify the message. If missing, standard input is used.
 
-*-a* [ATTACHMENT [ATTACHMENT ...]], *--attachment* [ATTACHMENT [ATTACHMENT ...]]::
+*-a* ATTACHMENT [ATTACHMENT ...], *--attachment* ATTACHMENT [ATTACHMENT ...]::
 Add one or more files as attachment.
 
 *--note-to-self*::
@@ -184,9 +189,13 @@ Send the message to self without notification.
 *-e*, *--end-session*::
 Clear session state and send end session message.
 
-=== sendReaction
+=== sendReaction RECIPIENT [RECIPIENT ...] -e|--emoji EMOJI -a|--target-author NUMBER -t|--target-timestamp TIMESTAMP
+=== sendReaction -g|--group-id GROUP [GROUP ...] -e|--emoji EMOJI -a|--target-author NUMBER -t|--target-timestamp TIMESTAMP
+=== sendReaction -r -a|--target-author NUMBER -t|--target-timestamp TIMESTAMP
 
 Send reaction to a previously received or sent message.
+Destinations may be in the form of one or more *RECIPIENT* phone numbers, or one or more *GROUP* identifiers
+(preceded by the *-g|--group-id* option), but they may not be mixed.
 
 RECIPIENT::
 Specify the recipients’ phone number.
@@ -206,7 +215,7 @@ Specify the timestamp of the message to which to react.
 *-r*, *--remove*::
 Remove a reaction.
 
-=== sendReceipt
+=== sendReceipt RECIPIENT -t|--target-timestamp TIMESTAMP [--type TYPE]
 
 Send a read or viewed receipt to a previously received message.
 
@@ -219,23 +228,29 @@ Specify the timestamp of the message to which to react.
 *--type* TYPE::
 Specify the receipt type, either `read` (the default) or `viewed`.
 
-=== sendTyping
+=== sendTyping RECIPIENT [RECIPIENT ...] [-s|--stop]
+=== sendTyping -g|--group-id GROUP [GROUP ...] [-s|--stop]
 
 Send typing message to trigger a typing indicator for the recipient.
-Indicator will be shown for 15seconds unless a typing STOP message is sent first.
+Indicator will be shown for 15 seconds unless a typing STOP message is sent first.
+Destinations may be in the form of one or more *RECIPIENT* phone numbers, or one or more *GROUP* identifiers
+(preceded by the *-g|--group-id* option), but they may not be mixed.
 
 RECIPIENT::
-Specify the recipients’ phone number.
+Specify phone number(s) of recipient(s).
 
 *-g* GROUP, *--group-id* GROUP::
-Specify the recipient group ID in base64 encoding.
+Specify group identifier(s) in base64 encoding.
 
 *-s*, *--stop*::
-Send a typing STOP message.
+Send a typing STOP message. 
 
-=== remoteDelete
+=== remoteDelete RECIPIENT [RECIPIENT ...] -t|--target-timestamp TIMESTAMP
+=== remoteDelete -g|--group-id GROUP [GROUP ...] -t|--target-timestamp TIMESTAMP
 
 Remotely delete a previously sent message.
+Destinations may be in the form of one or more *RECIPIENT* phone numbers, or one or more *GROUP* identifiers
+(preceded by the *-g|--group-id* option), but they may not be mixed.
 
 RECIPIENT::
 Specify the recipients’ phone number.
@@ -246,7 +261,7 @@ Specify the recipient group ID in base64 encoding.
 *-t* TIMESTAMP, *--target-timestamp* TIMESTAMP::
 Specify the timestamp of the message to delete.
 
-=== receive
+=== receive [-t|--timeout TIMEOUT] [--ignore-attachments]
 
 Query the server for new messages.
 New messages are printed on standard output and attachments are downloaded to the config directory.
@@ -258,17 +273,19 @@ Default is 5 seconds.
 *--ignore-attachments*::
 Don’t download attachments of received messages.
 
-=== joinGroup
+=== joinGroup --uri URI
 
 Join a group via an invitation link.
 
-*--uri*::
+*--uri* URI::
 The invitation link URI (starts with `https://signal.group/#`)
 
-=== updateGroup
+=== updateGroup [OPTIONS]
 
 Create or update a group.
 If the user is a pending member, this command will accept the group invitation.
+
+==== OPTIONS
 
 *-g* GROUP, *--group-id* GROUP::
 Specify the recipient group ID in base64 encoding.
@@ -283,20 +300,20 @@ Specify the new group description.
 *-a* AVATAR, *--avatar* AVATAR::
 Specify a new group avatar image file.
 
-*-m* [MEMBER [MEMBER ...]], *--member* [MEMBER [MEMBER ...]]::
+*-m* MEMBER [MEMBER ...], *--member* MEMBER [MEMBER ...]::
 Specify one or more members to add to the group.
 
-*-r* [MEMBER [MEMBER ...]], *--remove-member* [MEMBER [MEMBER ...]]::
+*-r* MEMBER [MEMBER ...], *--remove-member* MEMBER [MEMBER ...]::
 Specify one or more members to remove from the group
 
-*--admin* [MEMBER [MEMBER ...]]::
+*--admin* MEMBER [MEMBER ...]::
 Specify one or more members to make a group admin
 
-*--remove-admin* [MEMBER [MEMBER ...]]::
+*--remove-admin* MEMBER [MEMBER ...]::
 Specify one or more members to remove group admin privileges
 
 *--reset-link*::
-Reset group link and create new link password
+Create a new random group invitation link.
 
 *--link* LINK_STATE::
 Set group link state: `enabled`, `enabled-with-approval`, `disabled`
@@ -315,7 +332,7 @@ Groups where only admins can send messages are also called announcement groups
 Set expiration time of messages (seconds).
 To disable expiration set expiration time to 0.
 
-=== quitGroup
+=== quitGroup -g|--group-id GROUP [--delete]
 
 Send a quit group message to all group members and remove self from member list.
 If the user is a pending member, this command will decline the group invitation.
@@ -326,7 +343,7 @@ Specify the recipient group ID in base64 encoding.
 *--delete*::
 Delete local group data completely after quitting group.
 
-=== listGroups
+=== listGroups [-d|--detailed]
 
 Show a list of known groups and related information.
 In json mode this is outputted as an list of objects and is always in detailed mode.
@@ -338,34 +355,36 @@ Include the list of members of each group and the group invite link.
 
 Show a list of known contacts with names.
 
-=== listIdentities
+=== listIdentities [-n|--number NUMBER]
 
 List all known identity keys and their trust status, fingerprint and safety number.
 
 *-n* NUMBER, *--number* NUMBER::
 Only show identity keys for the given phone number.
 
-=== trust
+=== trust NUMBER [-a|--trust-all-known-keys] [-v|--verified-safety-number VERIFIED_SAFETY_NUMBER]
 
 Set the trust level of a given number.
 The first time a key for a number is seen, it is trusted by default (TOFU).
 If the key changes, the new key must be trusted manually.
 
-number::
+NUMBER::
 Specify the phone number, for which to set the trust.
 
 *-a*, *--trust-all-known-keys*::
-Trust all known keys of this user, only use this for testing.
+Trust all known keys of this user; only use this for testing.
 
 *-v* VERIFIED_SAFETY_NUMBER, *--verified-safety-number* VERIFIED_SAFETY_NUMBER::
-Specify the safety number of the key, only use this option if you have verified the safety number.
+Specify the safety number of the key; only use this option if you have verified the safety number.
 
-=== updateProfile
+=== updateProfile [OPTIONS]
 
-Update the profile information shown to message recipients.
+Update your profile information shown to message recipients.
 The profile is stored encrypted on the Signal servers.
-The decryption key is sent with every outgoing messages to contacts and included
+The decryption key is sent with every outgoing message to contacts and included
 in every group.
+
+==== OPTIONS
 
 *--given-name* NAME, *--name* NAME::
 New (given) name.
@@ -385,43 +404,49 @@ Path to the new avatar image file.
 *--remove-avatar*::
 Remove the avatar
 
-=== updateContact
+=== updateContact NUMBER -n|--name NAME [-e|--expiration EXPIRATION_SECONDS]
 
-Update the info associated to a number on our contact list.
-This change is only local but can be synchronized to other devices by using `sendContacts` (see below).
+Update the info associated to a number on your contact list.
+This change is only local but can be synchronized to other devices by using the `sendContacts` subcommand.
 If the contact doesn't exist yet, it will be added.
 
 NUMBER::
 Specify the contact phone number.
 
-*-n*, *--name*::
+*-n*, *--name* NAME::
 Specify the new name for this contact.
 
 *-e*, *--expiration* EXPIRATION_SECONDS::
 Set expiration time of messages (seconds).
 To disable expiration set expiration time to 0.
 
-=== block
+=== block CONTACT [CONTACT ...]
+=== block -g|--group-id* GROUP [GROUP ...]
 
-Block the given contacts or groups (no messages will be received).
+Block the given contact(s) or group(s) (no messages will be received).
 This change is only local but can be synchronized to other devices by using `sendContacts` (see below).
+Targets may be in the form of one or more *CONTACT* phone numbers, or one or more *GROUP* identifiers
+(preceded by the *-g|--group-id* option), but they may not be mixed.
 
-[CONTACT [CONTACT ...]]::
-Specify the phone numbers of contacts that should be blocked.
+CONTACT [CONTACT ...]::
+Specify the phone number(s) of contact(s) that should be blocked.
 
-*-g* [GROUP [GROUP ...]], *--group-id* [GROUP [GROUP ...]]::
-Specify the group IDs that should be blocked in base64 encoding.
+*-g* GROUP [GROUP ...], *--group-id* GROUP [GROUP ...]::
+Specify the group identifier(s) that should be blocked in base64 encoding.
 
-=== unblock
+=== unblock CONTACT [CONTACT ...]
+=== unblock -g|--group-id* GROUP [GROUP ...]
 
-Unblock the given contacts or groups (messages will be received again).
+Unblock the given contact(s) or group(s) (messages will be received again).
 This change is only local but can be synchronized to other devices by using `sendContacts` (see below).
+Targets may be in the form of one or more *CONTACT* phone numbers, or one or more *GROUP* identifiers
+(preceded by the *-g|--group-id* option), but they may not be mixed.
 
-[CONTACT [CONTACT ...]]::
-Specify the phone numbers of contacts that should be unblocked.
+CONTACT [CONTACT ...]::
+Specify the phone number(s) of contact(s) that should be unblocked.
 
-*-g* [GROUP [GROUP ...]], *--group-id* [GROUP [GROUP ...]]::
-Specify the group IDs that should be unblocked in base64 encoding.
+*-g* GROUP [GROUP ...], *--group-id* GROUP [GROUP ...]::
+Specify the group identifier(s) that should be unblocked in base64 encoding.
 
 === sendContacts
 
@@ -434,7 +459,7 @@ Send a synchronization request message to the primary device (for group, contact
 The primary device will respond with synchronization messages with full contact and
 group lists.
 
-=== uploadStickerPack
+=== uploadStickerPack PATH
 
 Upload a new sticker pack, consisting of a manifest file and the sticker images.
 Images must conform to the following specification: (see https://support.signal.org/hc/en-us/articles/360031836512-Stickers#sticker_reqs )
@@ -467,9 +492,9 @@ The required manifest.json has the following format:
 ----
 
 PATH::
-The path of the manifest.json or a zip file containing the sticker pack you wish to upload.
+The path of the manifest.json or a zip file in the same directory containing the sticker pack you wish to upload.
 
-=== daemon
+=== daemon [--system] [--ignore-attachments]
 
 signal-cli can run in daemon mode and provides an experimental dbus interface.
 If no `-u` username is given, all local users will be exported as separate dbus
@@ -489,13 +514,13 @@ Verify the number using the code received via SMS or voice::
 signal-cli -u USERNAME verify CODE
 
 Send a message to one or more recipients::
-signal-cli -u USERNAME send -m "This is a message" [RECIPIENT [RECIPIENT ...]] [-a [ATTACHMENT [ATTACHMENT ...]]]
+signal-cli -u USERNAME send -m "This is a message" RECIPIENT [RECIPIENT ...] [-a ATTACHMENT [ATTACHMENT ...]]
 
 Pipe the message content from another process::
-uname -a | signal-cli -u USERNAME send [RECIPIENT [RECIPIENT ...]]
+uname -a | signal-cli -u USERNAME send RECIPIENT [RECIPIENT ...]
 
 Create a group::
-signal-cli -u USERNAME updateGroup -n "Group name" -m [MEMBER [MEMBER ...]]
+signal-cli -u USERNAME updateGroup -n "Group name" [-m MEMBER [MEMBER ...]]
 
 Add member to a group::
 signal-cli -u USERNAME updateGroup -g GROUP_ID -m "NEW_MEMBER"
@@ -516,6 +541,7 @@ Trust new key, without having verified it. Only use this if you don't care about
 signal-cli -u USERNAME trust -a NUMBER
 
 == Exit codes
+
 * *1*: Error is probably caused and fixable by the user
 * *2*: Some unexpected error
 * *3*: Server or IO error

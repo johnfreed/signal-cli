@@ -1,6 +1,7 @@
 package org.asamk.signal.dbus;
 
 import org.asamk.SignalControl;
+import org.asamk.SignalControl.Error;
 import org.asamk.signal.App;
 import org.asamk.signal.BaseConfig;
 import org.asamk.signal.DbusConfig;
@@ -173,7 +174,8 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
                 try {
                     final Manager manager = provisioningManager.finishDeviceLink(newDeviceName);
                     logger.info("Linking of " + newDeviceName + " successful");
-                    manager.close();
+                    addManager(manager);
+                    listen(manager.getUsername());
                 } catch (TimeoutException e) {
                     throw new SignalControl.Error.Failure(e.getClass().getSimpleName() + ": Link request timed out, please try again.");
                 } catch (IOException e) {
@@ -200,7 +202,6 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
     @Override
     public void listen(String number) {
         try {
-
             File settingsPath = c.getSettingsPath();
             List<String> usernames = Manager.getAllLocalUsernames(settingsPath);
             if (!usernames.contains(number)) {
@@ -208,14 +209,12 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
             }
             String objectPath = DbusConfig.getObjectPath(number);
             DBusConnection.DBusBusType busType = DaemonCommand.dBusType;
-
             ServiceEnvironment serviceEnvironment = c.getServiceEnvironment();
-
-            //create new manager for this number
             TrustNewIdentity trustNewIdentity = DaemonCommand.trustNewIdentity;
-            final Manager m = App.loadManager(number, settingsPath, serviceEnvironment, trustNewIdentity);
-            this.addManager(m);
 
+        	//create new manager for this number
+            final Manager m = App.loadManager(number, settingsPath, serviceEnvironment, trustNewIdentity);
+            addManager(m);
             final var thread = new Thread(() -> {
                 try {
                     OutputWriter outputWriter = DaemonCommand.outputWriter;
@@ -262,21 +261,5 @@ public class DbusSignalControlImpl implements org.asamk.SignalControl {
                     .map(u -> new DBusPath(DbusConfig.getObjectPath(u)))
                     .collect(Collectors.toList());
         }
-    }
-}
-
-class StreamGobbler implements Runnable {
-    private InputStream inputStream;
-    private Consumer<String> consumer;
-
-    public StreamGobbler(InputStream inputStream, Consumer<String> consumer) {
-        this.inputStream = inputStream;
-        this.consumer = consumer;
-    }
-
-    @Override
-    public void run() {
-        new BufferedReader(new InputStreamReader(inputStream)).lines()
-          .forEach(consumer);
     }
 }

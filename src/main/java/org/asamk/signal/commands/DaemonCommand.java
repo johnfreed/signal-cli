@@ -137,8 +137,8 @@ public class DaemonCommand implements MultiLocalCommand {
                 String message = "\n\n" +
                         "*************************************" +
                         "\n\nDBUS_LAUNCHD_SESSION_BUS_SOCKET is not set. Issue the command:\n\n" +
-                        "export DBUS_LAUNCHD_SESSION_BUS_SOCKET=$(launchctl getenv DBUS_LAUNCHD_SESSION_BUS_SOCKET)\n" +
-                        "\nand then try again.\n\n" +
+                        "export DBUS_LAUNCHD_SESSION_BUS_SOCKET=$(launchctl getenv DBUS_LAUNCHD_SESSION_BUS_SOCKET)\n\n" +
+                        "and then try again.\n\n" +
                         "*************************************";
                 throw new UserErrorException(message);
             }

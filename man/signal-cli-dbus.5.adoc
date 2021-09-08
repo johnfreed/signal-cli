@@ -66,6 +66,7 @@ Exceptions: None
 
 listen(number<s>) -> <>::
 * number            : Phone number
+
 Adds a number to those listening to DBus.
 
 Exceptions: Failure, InvalidNumber
@@ -114,9 +115,9 @@ Exceptions: None
 
 getGroupIds() -> groupList<aay>::
 getGroupIds(dummy<s>) -> groupList<as>::
-dummy           : any string (ignored by method; forces output to be identical with getGroupIdsBase64)
-groupList       : Array of Byte arrays representing the internal group identifiers
-base64GroupList : Array of strings representing the internal group identifiers in Base64 format
+* dummy           : any string (ignored by method; forces output to be identical with getGroupIdsBase64)
+* groupList       : Array of Byte arrays representing the internal group identifiers
+* base64GroupList : Array of strings representing the internal group identifiers in Base64 format
 
 All groups known are returned, regardless of their active or blocked status. To query that use isMember() and isGroupBlocked()
 
@@ -449,7 +450,7 @@ listDevices() -> devices<as>::
 Exception: Failure
 
 listNumbers() -> numbers<as>::
-numbers : String array of all known numbers
+* numbers : String array of all known numbers
 
 This is a concatenated list of all defined contacts as well of profiles known (e.g. peer group members or sender of received messages)
 
@@ -494,17 +495,17 @@ Exception: Failure
 
 unlisten() -> <>::
 unlisten(keepData<b>) -> <>::
+* keepData  : true or omitted = keep files in data directory; false = delete files
 
 Stops the current device from listening to DBus. In single-user mode, kills the daemon.
-* keepData  : true or omitted = keep files in data directory; false = delete files
 
 Exception: Failure
 
 unregister() -> <>::
 unregister(keepData<b>) -> <>::
+* keepData  : true or omitted = keep files in data directory; false = delete files
 
 Unregisters the current device. In single-user mode, kills the daemon.
-* keepData  : true or omitted = keep files in data directory; false = delete files
 
 Exception: Failure
 
