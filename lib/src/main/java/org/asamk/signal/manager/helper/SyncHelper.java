@@ -2,11 +2,9 @@ package org.asamk.signal.manager.helper;
 
 import org.asamk.signal.manager.AvatarStore;
 import org.asamk.signal.manager.TrustLevel;
-import org.asamk.signal.manager.groups.GroupId;
 import org.asamk.signal.manager.storage.SignalAccount;
 import org.asamk.signal.manager.storage.groups.GroupInfoV1;
 import org.asamk.signal.manager.storage.recipients.Contact;
-import org.asamk.signal.manager.storage.recipients.RecipientResolver;
 import org.asamk.signal.manager.util.AttachmentUtils;
 import org.asamk.signal.manager.util.IOUtils;
 import org.slf4j.Logger;
@@ -21,8 +19,8 @@ import org.whispersystems.signalservice.api.messages.multidevice.DeviceContact;
 import org.whispersystems.signalservice.api.messages.multidevice.DeviceContactsInputStream;
 import org.whispersystems.signalservice.api.messages.multidevice.DeviceContactsOutputStream;
 import org.whispersystems.signalservice.api.messages.multidevice.DeviceGroup;
-import org.whispersystems.signalservice.api.messages.multidevice.DeviceGroupsInputStream;
 import org.whispersystems.signalservice.api.messages.multidevice.DeviceGroupsOutputStream;
+import org.whispersystems.signalservice.api.messages.multidevice.KeysMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.RequestMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.SignalServiceSyncMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.VerifiedMessage;
@@ -36,7 +34,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.stream.Collectors;
 
 public class SyncHelper {
@@ -49,7 +46,6 @@ public class SyncHelper {
     private final GroupHelper groupHelper;
     private final AvatarStore avatarStore;
     private final SignalServiceAddressResolver addressResolver;
-    private final RecipientResolver recipientResolver;
 
     public SyncHelper(
             final SignalAccount account,
@@ -57,8 +53,7 @@ public class SyncHelper {
             final SendHelper sendHelper,
             final GroupHelper groupHelper,
             final AvatarStore avatarStore,
-            final SignalServiceAddressResolver addressResolver,
-            final RecipientResolver recipientResolver
+            final SignalServiceAddressResolver addressResolver
     ) {
         this.account = account;
         this.attachmentHelper = attachmentHelper;
@@ -66,7 +61,6 @@ public class SyncHelper {
         this.groupHelper = groupHelper;
         this.avatarStore = avatarStore;
         this.addressResolver = addressResolver;
-        this.recipientResolver = recipientResolver;
     }
 
     public void requestAllSyncData() throws IOException {
@@ -222,57 +216,24 @@ public class SyncHelper {
         sendHelper.sendSyncMessage(SignalServiceSyncMessage.forVerified(verifiedMessage));
     }
 
-    public void handleSyncDeviceGroups(final InputStream input) {
-        final var s = new DeviceGroupsInputStream(input);
-        DeviceGroup g;
-        while (true) {
-            try {
-                g = s.read();
-            } catch (IOException e) {
-                logger.warn("Sync groups contained invalid group, ignoring: {}", e.getMessage());
-                continue;
-            }
-            if (g == null) {
-                break;
-            }
-            var syncGroup = account.getGroupStore().getOrCreateGroupV1(GroupId.v1(g.getId()));
-            if (syncGroup != null) {
-                if (g.getName().isPresent()) {
-                    syncGroup.name = g.getName().get();
-                }
-                syncGroup.addMembers(g.getMembers()
-                        .stream()
-                        .map(recipientResolver::resolveRecipient)
-                        .collect(Collectors.toSet()));
-                if (!g.isActive()) {
-                    syncGroup.removeMember(account.getSelfRecipientId());
-                } else {
-                    // Add ourself to the member set as it's marked as active
-                    syncGroup.addMembers(List.of(account.getSelfRecipientId()));
-                }
-                syncGroup.blocked = g.isBlocked();
-                if (g.getColor().isPresent()) {
-                    syncGroup.color = g.getColor().get();
-                }
-
-                if (g.getAvatar().isPresent()) {
-                    groupHelper.downloadGroupAvatar(syncGroup.getGroupId(), g.getAvatar().get());
-                }
-                syncGroup.archived = g.isArchived();
-                account.getGroupStore().updateGroup(syncGroup);
-            }
-        }
+    public void sendKeysMessage() throws IOException {
+        var keysMessage = new KeysMessage(Optional.fromNullable(account.getStorageKey()));
+        sendHelper.sendSyncMessage(SignalServiceSyncMessage.forKeys(keysMessage));
     }
 
-    public void handleSyncDeviceContacts(final InputStream input) {
+    public void handleSyncDeviceContacts(final InputStream input) throws IOException {
         final var s = new DeviceContactsInputStream(input);
         DeviceContact c;
         while (true) {
             try {
                 c = s.read();
             } catch (IOException e) {
-                logger.warn("Sync contacts contained invalid contact, might need to resync: {}", e.getMessage());
-                break;
+                if (e.getMessage() != null && e.getMessage().contains("Missing contact address!")) {
+                    logger.warn("Sync contacts contained invalid contact, ignoring: {}", e.getMessage());
+                    continue;
+                } else {
+                    throw e;
+                }
             }
             if (c == null) {
                 break;

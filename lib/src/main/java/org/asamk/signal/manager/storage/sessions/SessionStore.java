@@ -3,7 +3,6 @@ package org.asamk.signal.manager.storage.sessions;
 import org.asamk.signal.manager.storage.recipients.RecipientId;
 import org.asamk.signal.manager.storage.recipients.RecipientResolver;
 import org.asamk.signal.manager.util.IOUtils;
-import org.asamk.signal.manager.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.whispersystems.libsignal.NoSessionException;
@@ -23,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -109,11 +109,7 @@ public class SessionStore implements SignalServiceSessionStore {
 
         synchronized (cachedSessions) {
             final var session = loadSessionLocked(key);
-            if (session == null) {
-                return false;
-            }
-
-            return session.hasSenderChain() && session.getSessionVersion() == CiphertextMessage.CURRENT_VERSION;
+            return isActive(session);
         }
     }
 
@@ -150,6 +146,20 @@ public class SessionStore implements SignalServiceSessionStore {
         }
     }
 
+    @Override
+    public Set<SignalProtocolAddress> getAllAddressesWithActiveSessions(final List<String> addressNames) {
+        final var recipientIdToNameMap = addressNames.stream()
+                .collect(Collectors.toMap(this::resolveRecipient, name -> name));
+        synchronized (cachedSessions) {
+            return recipientIdToNameMap.keySet()
+                    .stream()
+                    .flatMap(recipientId -> getKeysLocked(recipientId).stream())
+                    .filter(key -> isActive(this.loadSessionLocked(key)))
+                    .map(key -> new SignalProtocolAddress(recipientIdToNameMap.get(key.recipientId), key.getDeviceId()))
+                    .collect(Collectors.toSet());
+        }
+    }
+
     public void archiveAllSessions() {
         synchronized (cachedSessions) {
             final var keys = getKeysLocked();
@@ -169,7 +179,8 @@ public class SessionStore implements SignalServiceSessionStore {
 
     public void mergeRecipients(RecipientId recipientId, RecipientId toBeMergedRecipientId) {
         synchronized (cachedSessions) {
-            final var otherHasSession = getKeysLocked(toBeMergedRecipientId).size() > 0;
+            final var keys = getKeysLocked(toBeMergedRecipientId);
+            final var otherHasSession = keys.size() > 0;
             if (!otherHasSession) {
                 return;
             }
@@ -179,8 +190,7 @@ public class SessionStore implements SignalServiceSessionStore {
                 logger.debug("To be merged recipient had sessions, deleting.");
                 deleteAllSessions(toBeMergedRecipientId);
             } else {
-                logger.debug("To be merged recipient had sessions, re-assigning to the new recipient.");
-                final var keys = getKeysLocked(toBeMergedRecipientId);
+                logger.debug("Only to be merged recipient had sessions, re-assigning to the new recipient.");
                 for (var key : keys) {
                     final var session = loadSessionLocked(key);
                     deleteSessionLocked(key);
@@ -198,7 +208,7 @@ public class SessionStore implements SignalServiceSessionStore {
      * @param identifier can be either a serialized uuid or a e164 phone number
      */
     private RecipientId resolveRecipient(String identifier) {
-        return resolver.resolveRecipient(Utils.getSignalServiceAddressFromIdentifier(identifier));
+        return resolver.resolveRecipient(identifier);
     }
 
     private Key getKey(final SignalProtocolAddress address) {
@@ -306,6 +316,12 @@ public class SessionStore implements SignalServiceSessionStore {
         } catch (IOException e) {
             logger.error("Failed to delete session file {}: {}", file, e.getMessage());
         }
+    }
+
+    private static boolean isActive(SessionRecord record) {
+        return record != null
+                && record.hasSenderChain()
+                && record.getSessionVersion() == CiphertextMessage.CURRENT_VERSION;
     }
 
     private static final class Key {

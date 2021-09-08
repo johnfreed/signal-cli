@@ -4,15 +4,18 @@ import org.asamk.signal.manager.JobExecutor;
 import org.asamk.signal.manager.Manager;
 import org.asamk.signal.manager.SignalDependencies;
 import org.asamk.signal.manager.TrustLevel;
+import org.asamk.signal.manager.UntrustedIdentityException;
 import org.asamk.signal.manager.actions.HandleAction;
 import org.asamk.signal.manager.actions.RenewSessionAction;
 import org.asamk.signal.manager.actions.RetrieveProfileAction;
+import org.asamk.signal.manager.actions.RetrieveStorageDataAction;
 import org.asamk.signal.manager.actions.SendGroupInfoAction;
 import org.asamk.signal.manager.actions.SendGroupInfoRequestAction;
 import org.asamk.signal.manager.actions.SendReceiptAction;
 import org.asamk.signal.manager.actions.SendSyncBlockedListAction;
 import org.asamk.signal.manager.actions.SendSyncContactsAction;
 import org.asamk.signal.manager.actions.SendSyncGroupsAction;
+import org.asamk.signal.manager.actions.SendSyncKeysAction;
 import org.asamk.signal.manager.groups.GroupId;
 import org.asamk.signal.manager.groups.GroupNotFoundException;
 import org.asamk.signal.manager.groups.GroupUtils;
@@ -29,11 +32,13 @@ import org.signal.zkgroup.InvalidInputException;
 import org.signal.zkgroup.profiles.ProfileKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.whispersystems.libsignal.SignalProtocolAddress;
 import org.whispersystems.libsignal.util.Pair;
 import org.whispersystems.signalservice.api.messages.SignalServiceContent;
 import org.whispersystems.signalservice.api.messages.SignalServiceDataMessage;
 import org.whispersystems.signalservice.api.messages.SignalServiceEnvelope;
 import org.whispersystems.signalservice.api.messages.SignalServiceGroup;
+import org.whispersystems.signalservice.api.messages.multidevice.SignalServiceSyncMessage;
 import org.whispersystems.signalservice.api.messages.multidevice.StickerPackOperationMessage;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 
@@ -48,6 +53,7 @@ public final class IncomingMessageHandler {
     private final SignalAccount account;
     private final SignalDependencies dependencies;
     private final RecipientResolver recipientResolver;
+    private final SignalServiceAddressResolver addressResolver;
     private final GroupHelper groupHelper;
     private final ContactHelper contactHelper;
     private final AttachmentHelper attachmentHelper;
@@ -58,6 +64,7 @@ public final class IncomingMessageHandler {
             final SignalAccount account,
             final SignalDependencies dependencies,
             final RecipientResolver recipientResolver,
+            final SignalServiceAddressResolver addressResolver,
             final GroupHelper groupHelper,
             final ContactHelper contactHelper,
             final AttachmentHelper attachmentHelper,
@@ -67,11 +74,34 @@ public final class IncomingMessageHandler {
         this.account = account;
         this.dependencies = dependencies;
         this.recipientResolver = recipientResolver;
+        this.addressResolver = addressResolver;
         this.groupHelper = groupHelper;
         this.contactHelper = contactHelper;
         this.attachmentHelper = attachmentHelper;
         this.syncHelper = syncHelper;
         this.jobExecutor = jobExecutor;
+    }
+
+    public Pair<List<HandleAction>, Exception> handleRetryEnvelope(
+            final SignalServiceEnvelope envelope,
+            final boolean ignoreAttachments,
+            final Manager.ReceiveMessageHandler handler
+    ) {
+        SignalServiceContent content = null;
+        if (!envelope.isReceipt()) {
+            try {
+                content = dependencies.getCipher().decrypt(envelope);
+            } catch (ProtocolUntrustedIdentityException e) {
+                final var recipientId = account.getRecipientStore().resolveRecipient(e.getSender());
+                final var exception = new UntrustedIdentityException(addressResolver.resolveSignalServiceAddress(
+                        recipientId), e.getSenderDevice());
+                return new Pair<>(List.of(), exception);
+            } catch (Exception e) {
+                return new Pair<>(List.of(), e);
+            }
+        }
+        final var actions = checkAndHandleMessage(envelope, content, ignoreAttachments, handler, null);
+        return new Pair<>(actions, null);
     }
 
     public Pair<List<HandleAction>, Exception> handleEnvelope(
@@ -80,7 +110,7 @@ public final class IncomingMessageHandler {
             final Manager.ReceiveMessageHandler handler
     ) {
         final var actions = new ArrayList<HandleAction>();
-        if (envelope.hasSource()) {
+        if (envelope.hasSourceUuid()) {
             // Store uuid if we don't have it already
             // address/uuid in envelope is sent by server
             account.getRecipientStore().resolveRecipientTrusted(envelope.getSourceAddress());
@@ -93,6 +123,8 @@ public final class IncomingMessageHandler {
             } catch (ProtocolUntrustedIdentityException e) {
                 final var recipientId = account.getRecipientStore().resolveRecipient(e.getSender());
                 actions.add(new RetrieveProfileAction(recipientId));
+                exception = new UntrustedIdentityException(addressResolver.resolveSignalServiceAddress(recipientId),
+                        e.getSenderDevice());
             } catch (ProtocolInvalidMessageException e) {
                 final var sender = account.getRecipientStore().resolveRecipient(e.getSender());
                 logger.debug("Received invalid message, queuing renew session action.");
@@ -101,172 +133,205 @@ public final class IncomingMessageHandler {
             } catch (Exception e) {
                 exception = e;
             }
-
-            if (!envelope.hasSource() && content != null) {
-                // Store uuid if we don't have it already
-                // address/uuid is validated by unidentified sender certificate
-                account.getRecipientStore().resolveRecipientTrusted(content.getSender());
-            }
-
-            actions.addAll(handleMessage(envelope, content, ignoreAttachments));
         }
 
+        actions.addAll(checkAndHandleMessage(envelope, content, ignoreAttachments, handler, exception));
+        return new Pair<>(actions, exception);
+    }
+
+    private List<HandleAction> checkAndHandleMessage(
+            final SignalServiceEnvelope envelope,
+            final SignalServiceContent content,
+            final boolean ignoreAttachments,
+            final Manager.ReceiveMessageHandler handler,
+            final Exception exception
+    ) {
+        if (!envelope.hasSourceUuid() && content != null) {
+            // Store uuid if we don't have it already
+            // address/uuid is validated by unidentified sender certificate
+            account.getRecipientStore().resolveRecipientTrusted(content.getSender());
+        }
         if (isMessageBlocked(envelope, content)) {
             logger.info("Ignoring a message from blocked user/group: {}", envelope.getTimestamp());
+            return List.of();
         } else if (isNotAllowedToSendToGroup(envelope, content)) {
             logger.info("Ignoring a group message from an unauthorized sender (no member or admin): {} {}",
-                    (envelope.hasSource() ? envelope.getSourceAddress() : content.getSender()).getIdentifier(),
+                    (envelope.hasSourceUuid() ? envelope.getSourceAddress() : content.getSender()).getIdentifier(),
                     envelope.getTimestamp());
+            return List.of();
         } else {
+            List<HandleAction> actions;
+            if (content != null) {
+                actions = handleMessage(envelope, content, ignoreAttachments);
+            } else {
+                actions = List.of();
+            }
             handler.handleMessage(envelope, content, exception);
+            return actions;
         }
-        return new Pair<>(actions, exception);
     }
 
     public List<HandleAction> handleMessage(
             SignalServiceEnvelope envelope, SignalServiceContent content, boolean ignoreAttachments
     ) {
         var actions = new ArrayList<HandleAction>();
-        if (content != null) {
-            final RecipientId sender;
-            if (!envelope.isUnidentifiedSender() && envelope.hasSource()) {
-                sender = recipientResolver.resolveRecipient(envelope.getSourceAddress());
-            } else {
-                sender = recipientResolver.resolveRecipient(content.getSender());
+        final RecipientId sender;
+        final int senderDeviceId;
+        if (!envelope.isUnidentifiedSender() && envelope.hasSourceUuid()) {
+            sender = recipientResolver.resolveRecipient(envelope.getSourceAddress());
+            senderDeviceId = envelope.getSourceDevice();
+        } else {
+            sender = recipientResolver.resolveRecipient(content.getSender());
+            senderDeviceId = content.getSenderDevice();
+        }
+
+        if (content.getSenderKeyDistributionMessage().isPresent()) {
+            final var message = content.getSenderKeyDistributionMessage().get();
+            final var protocolAddress = new SignalProtocolAddress(addressResolver.resolveSignalServiceAddress(sender)
+                    .getIdentifier(), senderDeviceId);
+            dependencies.getMessageSender().processSenderKeyDistributionMessage(protocolAddress, message);
+        }
+
+        if (content.getDataMessage().isPresent()) {
+            var message = content.getDataMessage().get();
+
+            if (content.isNeedsReceipt()) {
+                actions.add(new SendReceiptAction(sender, message.getTimestamp()));
             }
 
-            if (content.getDataMessage().isPresent()) {
-                var message = content.getDataMessage().get();
+            actions.addAll(handleSignalServiceDataMessage(message,
+                    false,
+                    sender,
+                    account.getSelfRecipientId(),
+                    ignoreAttachments));
+        }
 
-                if (content.isNeedsReceipt()) {
-                    actions.add(new SendReceiptAction(sender, message.getTimestamp()));
-                }
+        if (content.getSyncMessage().isPresent()) {
+            var syncMessage = content.getSyncMessage().get();
+            actions.addAll(handleSyncMessage(syncMessage, sender, ignoreAttachments));
+        }
 
-                actions.addAll(handleSignalServiceDataMessage(message,
-                        false,
-                        sender,
-                        account.getSelfRecipientId(),
-                        ignoreAttachments));
+        return actions;
+    }
+
+    private List<HandleAction> handleSyncMessage(
+            final SignalServiceSyncMessage syncMessage, final RecipientId sender, final boolean ignoreAttachments
+    ) {
+        var actions = new ArrayList<HandleAction>();
+        account.setMultiDevice(true);
+        if (syncMessage.getSent().isPresent()) {
+            var message = syncMessage.getSent().get();
+            final var destination = message.getDestination().orNull();
+            actions.addAll(handleSignalServiceDataMessage(message.getMessage(),
+                    true,
+                    sender,
+                    destination == null ? null : recipientResolver.resolveRecipient(destination),
+                    ignoreAttachments));
+        }
+        if (syncMessage.getRequest().isPresent() && account.isMasterDevice()) {
+            var rm = syncMessage.getRequest().get();
+            if (rm.isContactsRequest()) {
+                actions.add(SendSyncContactsAction.create());
             }
-            if (content.getSyncMessage().isPresent()) {
-                account.setMultiDevice(true);
-                var syncMessage = content.getSyncMessage().get();
-                if (syncMessage.getSent().isPresent()) {
-                    var message = syncMessage.getSent().get();
-                    final var destination = message.getDestination().orNull();
-                    actions.addAll(handleSignalServiceDataMessage(message.getMessage(),
-                            true,
-                            sender,
-                            destination == null ? null : recipientResolver.resolveRecipient(destination),
-                            ignoreAttachments));
-                }
-                if (syncMessage.getRequest().isPresent() && account.isMasterDevice()) {
-                    var rm = syncMessage.getRequest().get();
-                    if (rm.isContactsRequest()) {
-                        actions.add(SendSyncContactsAction.create());
-                    }
-                    if (rm.isGroupsRequest()) {
-                        actions.add(SendSyncGroupsAction.create());
-                    }
-                    if (rm.isBlockedListRequest()) {
-                        actions.add(SendSyncBlockedListAction.create());
-                    }
-                    // TODO Handle rm.isConfigurationRequest(); rm.isKeysRequest();
-                }
-                if (syncMessage.getGroups().isPresent()) {
-                    try {
-                        final var groupsMessage = syncMessage.getGroups().get();
-                        attachmentHelper.retrieveAttachment(groupsMessage, syncHelper::handleSyncDeviceGroups);
-                    } catch (Exception e) {
-                        logger.warn("Failed to handle received sync groups, ignoring: {}", e.getMessage());
-                    }
-                }
-                if (syncMessage.getBlockedList().isPresent()) {
-                    final var blockedListMessage = syncMessage.getBlockedList().get();
-                    for (var address : blockedListMessage.getAddresses()) {
-                        contactHelper.setContactBlocked(recipientResolver.resolveRecipient(address), true);
-                    }
-                    for (var groupId : blockedListMessage.getGroupIds()
-                            .stream()
-                            .map(GroupId::unknownVersion)
-                            .collect(Collectors.toSet())) {
-                        try {
-                            groupHelper.setGroupBlocked(groupId, true);
-                        } catch (GroupNotFoundException e) {
-                            logger.warn("BlockedListMessage contained groupID that was not found in GroupStore: {}",
-                                    groupId.toBase64());
-                        }
-                    }
-                }
-                if (syncMessage.getContacts().isPresent()) {
-                    try {
-                        final var contactsMessage = syncMessage.getContacts().get();
-                        attachmentHelper.retrieveAttachment(contactsMessage.getContactsStream(),
-                                syncHelper::handleSyncDeviceContacts);
-                    } catch (Exception e) {
-                        logger.warn("Failed to handle received sync contacts, ignoring: {}", e.getMessage());
-                    }
-                }
-                if (syncMessage.getVerified().isPresent()) {
-                    final var verifiedMessage = syncMessage.getVerified().get();
-                    account.getIdentityKeyStore()
-                            .setIdentityTrustLevel(account.getRecipientStore()
-                                            .resolveRecipientTrusted(verifiedMessage.getDestination()),
-                                    verifiedMessage.getIdentityKey(),
-                                    TrustLevel.fromVerifiedState(verifiedMessage.getVerified()));
-                }
-                if (syncMessage.getStickerPackOperations().isPresent()) {
-                    final var stickerPackOperationMessages = syncMessage.getStickerPackOperations().get();
-                    for (var m : stickerPackOperationMessages) {
-                        if (!m.getPackId().isPresent()) {
-                            continue;
-                        }
-                        final var stickerPackId = StickerPackId.deserialize(m.getPackId().get());
-                        final var installed = !m.getType().isPresent()
-                                || m.getType().get() == StickerPackOperationMessage.Type.INSTALL;
-
-                        var sticker = account.getStickerStore().getSticker(stickerPackId);
-                        if (m.getPackKey().isPresent()) {
-                            if (sticker == null) {
-                                sticker = new Sticker(stickerPackId, m.getPackKey().get());
-                            }
-                            if (installed) {
-                                jobExecutor.enqueueJob(new RetrieveStickerPackJob(stickerPackId, m.getPackKey().get()));
-                            }
-                        }
-
-                        if (sticker != null) {
-                            sticker.setInstalled(installed);
-                            account.getStickerStore().updateSticker(sticker);
-                        }
-                    }
-                }
-                if (syncMessage.getFetchType().isPresent()) {
-                    switch (syncMessage.getFetchType().get()) {
-                        case LOCAL_PROFILE:
-                            actions.add(new RetrieveProfileAction(account.getSelfRecipientId()));
-                        case STORAGE_MANIFEST:
-                            // TODO
-                    }
-                }
-                if (syncMessage.getKeys().isPresent()) {
-                    final var keysMessage = syncMessage.getKeys().get();
-                    if (keysMessage.getStorageService().isPresent()) {
-                        final var storageKey = keysMessage.getStorageService().get();
-                        account.setStorageKey(storageKey);
-                    }
-                }
-                if (syncMessage.getConfiguration().isPresent()) {
-                    // TODO
+            if (rm.isGroupsRequest()) {
+                actions.add(SendSyncGroupsAction.create());
+            }
+            if (rm.isBlockedListRequest()) {
+                actions.add(SendSyncBlockedListAction.create());
+            }
+            if (rm.isKeysRequest()) {
+                actions.add(SendSyncKeysAction.create());
+            }
+            // TODO Handle rm.isConfigurationRequest();
+        }
+        if (syncMessage.getGroups().isPresent()) {
+            logger.warn("Received a group v1 sync message, that can't be handled anymore, ignoring.");
+        }
+        if (syncMessage.getBlockedList().isPresent()) {
+            final var blockedListMessage = syncMessage.getBlockedList().get();
+            for (var address : blockedListMessage.getAddresses()) {
+                contactHelper.setContactBlocked(recipientResolver.resolveRecipient(address), true);
+            }
+            for (var groupId : blockedListMessage.getGroupIds()
+                    .stream()
+                    .map(GroupId::unknownVersion)
+                    .collect(Collectors.toSet())) {
+                try {
+                    groupHelper.setGroupBlocked(groupId, true);
+                } catch (GroupNotFoundException e) {
+                    logger.warn("BlockedListMessage contained groupID that was not found in GroupStore: {}",
+                            groupId.toBase64());
                 }
             }
+        }
+        if (syncMessage.getContacts().isPresent()) {
+            try {
+                final var contactsMessage = syncMessage.getContacts().get();
+                attachmentHelper.retrieveAttachment(contactsMessage.getContactsStream(),
+                        syncHelper::handleSyncDeviceContacts);
+            } catch (Exception e) {
+                logger.warn("Failed to handle received sync contacts, ignoring: {}", e.getMessage());
+            }
+        }
+        if (syncMessage.getVerified().isPresent()) {
+            final var verifiedMessage = syncMessage.getVerified().get();
+            account.getIdentityKeyStore()
+                    .setIdentityTrustLevel(account.getRecipientStore()
+                                    .resolveRecipientTrusted(verifiedMessage.getDestination()),
+                            verifiedMessage.getIdentityKey(),
+                            TrustLevel.fromVerifiedState(verifiedMessage.getVerified()));
+        }
+        if (syncMessage.getStickerPackOperations().isPresent()) {
+            final var stickerPackOperationMessages = syncMessage.getStickerPackOperations().get();
+            for (var m : stickerPackOperationMessages) {
+                if (!m.getPackId().isPresent()) {
+                    continue;
+                }
+                final var stickerPackId = StickerPackId.deserialize(m.getPackId().get());
+                final var installed = !m.getType().isPresent()
+                        || m.getType().get() == StickerPackOperationMessage.Type.INSTALL;
+
+                var sticker = account.getStickerStore().getSticker(stickerPackId);
+                if (m.getPackKey().isPresent()) {
+                    if (sticker == null) {
+                        sticker = new Sticker(stickerPackId, m.getPackKey().get());
+                    }
+                    if (installed) {
+                        jobExecutor.enqueueJob(new RetrieveStickerPackJob(stickerPackId, m.getPackKey().get()));
+                    }
+                }
+
+                if (sticker != null) {
+                    sticker.setInstalled(installed);
+                    account.getStickerStore().updateSticker(sticker);
+                }
+            }
+        }
+        if (syncMessage.getFetchType().isPresent()) {
+            switch (syncMessage.getFetchType().get()) {
+                case LOCAL_PROFILE:
+                    actions.add(new RetrieveProfileAction(account.getSelfRecipientId()));
+                case STORAGE_MANIFEST:
+                    actions.add(RetrieveStorageDataAction.create());
+            }
+        }
+        if (syncMessage.getKeys().isPresent()) {
+            final var keysMessage = syncMessage.getKeys().get();
+            if (keysMessage.getStorageService().isPresent()) {
+                final var storageKey = keysMessage.getStorageService().get();
+                account.setStorageKey(storageKey);
+                actions.add(RetrieveStorageDataAction.create());
+            }
+        }
+        if (syncMessage.getConfiguration().isPresent()) {
+            // TODO
         }
         return actions;
     }
 
     private boolean isMessageBlocked(SignalServiceEnvelope envelope, SignalServiceContent content) {
         SignalServiceAddress source;
-        if (!envelope.isUnidentifiedSender() && envelope.hasSource()) {
+        if (!envelope.isUnidentifiedSender() && envelope.hasSourceUuid()) {
             source = envelope.getSourceAddress();
         } else if (content != null) {
             source = content.getSender();
@@ -291,7 +356,7 @@ public final class IncomingMessageHandler {
 
     private boolean isNotAllowedToSendToGroup(SignalServiceEnvelope envelope, SignalServiceContent content) {
         SignalServiceAddress source;
-        if (!envelope.isUnidentifiedSender() && envelope.hasSource()) {
+        if (!envelope.isUnidentifiedSender() && envelope.hasSourceUuid()) {
             source = envelope.getSourceAddress();
         } else if (content != null) {
             source = content.getSender();

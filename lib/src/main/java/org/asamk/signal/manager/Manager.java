@@ -42,6 +42,7 @@ import org.asamk.signal.manager.helper.IncomingMessageHandler;
 import org.asamk.signal.manager.helper.PinHelper;
 import org.asamk.signal.manager.helper.ProfileHelper;
 import org.asamk.signal.manager.helper.SendHelper;
+import org.asamk.signal.manager.helper.StorageHelper;
 import org.asamk.signal.manager.helper.SyncHelper;
 import org.asamk.signal.manager.helper.UnidentifiedAccessHelper;
 import org.asamk.signal.manager.jobs.Context;
@@ -73,7 +74,6 @@ import org.whispersystems.libsignal.state.SignedPreKeyRecord;
 import org.whispersystems.libsignal.util.Pair;
 import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.api.SignalSessionLock;
-import org.whispersystems.signalservice.api.crypto.UntrustedIdentityException;
 import org.whispersystems.signalservice.api.groupsv2.GroupLinkNotActiveException;
 import org.whispersystems.signalservice.api.messages.SendMessageResult;
 import org.whispersystems.signalservice.api.messages.SignalServiceAttachmentRemoteId;
@@ -83,6 +83,7 @@ import org.whispersystems.signalservice.api.messages.SignalServiceEnvelope;
 import org.whispersystems.signalservice.api.messages.SignalServiceReceiptMessage;
 import org.whispersystems.signalservice.api.messages.SignalServiceTypingMessage;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
+import org.whispersystems.signalservice.api.push.exceptions.UnregisteredUserException;
 import org.whispersystems.signalservice.api.util.DeviceNameUtil;
 import org.whispersystems.signalservice.api.util.InvalidNumberException;
 import org.whispersystems.signalservice.api.util.PhoneNumberFormatter;
@@ -135,6 +136,7 @@ public class Manager implements Closeable {
     private final ProfileHelper profileHelper;
     private final PinHelper pinHelper;
     private final PathConfig pathConfig;
+    private final StorageHelper storageHelper;
     private final SendHelper sendHelper;
     private final SyncHelper syncHelper;
     private final AttachmentHelper attachmentHelper;
@@ -143,6 +145,7 @@ public class Manager implements Closeable {
     private final IncomingMessageHandler incomingMessageHandler;
 
     private final Context context;
+    private boolean hasCaughtUpWithOldMessages = false;
 
     Manager(
             SignalAccount account,
@@ -167,8 +170,7 @@ public class Manager implements Closeable {
                 return LEGACY_LOCK::unlock;
             }
         };
-        this.dependencies = new SignalDependencies(account.getSelfAddress(),
-                serviceEnvironmentConfig,
+        this.dependencies = new SignalDependencies(serviceEnvironmentConfig,
                 userAgent,
                 credentialsProvider,
                 account.getSignalProtocolStore(),
@@ -189,8 +191,6 @@ public class Manager implements Closeable {
                 avatarStore,
                 account.getProfileStore()::getProfileKey,
                 unidentifiedAccessHelper::getAccessFor,
-                dependencies::getProfileService,
-                dependencies::getMessageReceiver,
                 this::resolveSignalServiceAddress);
         final GroupV2Helper groupV2Helper = new GroupV2Helper(profileHelper::getRecipientProfileKeyCredential,
                 this::getRecipientProfile,
@@ -202,7 +202,7 @@ public class Manager implements Closeable {
                 dependencies,
                 unidentifiedAccessHelper,
                 this::resolveSignalServiceAddress,
-                this::resolveRecipient,
+                account.getRecipientStore(),
                 this::handleIdentityFailure,
                 this::getGroup,
                 this::refreshRegisteredUser);
@@ -213,29 +213,30 @@ public class Manager implements Closeable {
                 groupV2Helper,
                 avatarStore,
                 this::resolveSignalServiceAddress,
-                this::resolveRecipient);
+                account.getRecipientStore());
+        this.storageHelper = new StorageHelper(account, dependencies, groupHelper);
         this.contactHelper = new ContactHelper(account);
         this.syncHelper = new SyncHelper(account,
                 attachmentHelper,
                 sendHelper,
                 groupHelper,
                 avatarStore,
-                this::resolveSignalServiceAddress,
-                this::resolveRecipient);
+                this::resolveSignalServiceAddress);
 
         this.context = new Context(account,
-                dependencies.getAccountManager(),
-                dependencies.getMessageReceiver(),
+                dependencies,
                 stickerPackStore,
                 sendHelper,
                 groupHelper,
                 syncHelper,
-                profileHelper);
+                profileHelper,
+                storageHelper);
         var jobExecutor = new JobExecutor(context);
 
         this.incomingMessageHandler = new IncomingMessageHandler(account,
                 dependencies,
-                this::resolveRecipient,
+                account.getRecipientStore(),
+                this::resolveSignalServiceAddress,
                 groupHelper,
                 contactHelper,
                 attachmentHelper,
@@ -325,7 +326,7 @@ public class Manager implements Closeable {
         if (account.getUuid() == null) {
             account.setUuid(dependencies.getAccountManager().getOwnUuid());
         }
-        updateAccountAttributes();
+        updateAccountAttributes(null);
     }
 
     /**
@@ -338,7 +339,7 @@ public class Manager implements Closeable {
     public Map<String, Pair<String, UUID>> areUsersRegistered(Set<String> numbers) throws IOException, InvalidNumberException {
         Map<String, String> canonicalizedNumbers = numbers.stream().collect(Collectors.toMap(n -> n, n -> {
             try {
-                return canonicalizePhoneNumber(n);
+                return PhoneNumberFormatter.formatNumber(n, account.getUsername());
             } catch (InvalidNumberException e) {
                 return "";
             }
@@ -357,14 +358,21 @@ public class Manager implements Closeable {
         }));
     }
 
-    public void updateAccountAttributes() throws IOException {
+    public void updateAccountAttributes(String deviceName) throws IOException {
+        final String encryptedDeviceName;
+        if (deviceName == null) {
+            encryptedDeviceName = account.getEncryptedDeviceName();
+        } else {
+            final var privateKey = account.getIdentityKeyPair().getPrivateKey();
+            encryptedDeviceName = DeviceNameUtil.encryptDeviceName(deviceName, privateKey);
+            account.setEncryptedDeviceName(encryptedDeviceName);
+        }
         dependencies.getAccountManager()
-                .setAccountAttributes(account.getEncryptedDeviceName(),
+                .setAccountAttributes(encryptedDeviceName,
                         null,
                         account.getLocalRegistrationId(),
                         true,
-                        // set legacy pin only if no KBS master key is set
-                        account.getPinMasterKey() == null ? account.getRegistrationLockPin() : null,
+                        null,
                         account.getPinMasterKey() == null ? null : account.getPinMasterKey().deriveRegistrationLock(),
                         account.getSelfUnidentifiedAccessKey(),
                         account.isUnrestrictedUnidentifiedAccess(),
@@ -397,6 +405,13 @@ public class Manager implements Closeable {
     }
 
     public void deleteAccount() throws IOException {
+        try {
+            pinHelper.removeRegistrationLockPin();
+        } catch (UnauthenticatedResponseException e) {
+            logger.warn("Failed to remove registration lock pin");
+        }
+        account.setRegistrationLockPin(null, null);
+
         dependencies.getAccountManager().deleteAccount();
 
         account.setRegistered(false);
@@ -501,7 +516,7 @@ public class Manager implements Closeable {
     public SendGroupMessageResults quitGroup(
             GroupId groupId, Set<RecipientIdentifier.Single> groupAdmins
     ) throws GroupNotFoundException, IOException, NotAGroupMemberException, LastGroupAdminException {
-        final var newAdmins = getRecipientIds(groupAdmins);
+        final var newAdmins = resolveRecipients(groupAdmins);
         return groupHelper.quitGroup(groupId, newAdmins);
     }
 
@@ -512,7 +527,7 @@ public class Manager implements Closeable {
     public Pair<GroupId, SendGroupMessageResults> createGroup(
             String name, Set<RecipientIdentifier.Single> members, File avatarFile
     ) throws IOException, AttachmentInvalidException {
-        return groupHelper.createGroup(name, members == null ? null : getRecipientIds(members), avatarFile);
+        return groupHelper.createGroup(name, members == null ? null : resolveRecipients(members), avatarFile);
     }
 
     public SendGroupMessageResults updateGroup(
@@ -534,10 +549,10 @@ public class Manager implements Closeable {
         return groupHelper.updateGroup(groupId,
                 name,
                 description,
-                members == null ? null : getRecipientIds(members),
-                removeMembers == null ? null : getRecipientIds(removeMembers),
-                admins == null ? null : getRecipientIds(admins),
-                removeAdmins == null ? null : getRecipientIds(removeAdmins),
+                members == null ? null : resolveRecipients(members),
+                removeMembers == null ? null : resolveRecipients(removeMembers),
+                admins == null ? null : resolveRecipients(admins),
+                removeAdmins == null ? null : resolveRecipients(removeAdmins),
                 resetGroupLink,
                 groupLinkState,
                 addMemberPermission,
@@ -673,7 +688,7 @@ public class Manager implements Closeable {
 
     public void setContactName(
             RecipientIdentifier.Single recipient, String name
-    ) throws NotMasterDeviceException {
+    ) throws NotMasterDeviceException, UnregisteredUserException {
         if (!account.isMasterDevice()) {
             throw new NotMasterDeviceException();
         }
@@ -748,6 +763,13 @@ public class Manager implements Closeable {
 
     public void requestAllSyncData() throws IOException {
         syncHelper.requestAllSyncData();
+        retrieveRemoteStorage();
+    }
+
+    void retrieveRemoteStorage() throws IOException {
+        if (account.getStorageKey() != null) {
+            storageHelper.readDataFromStorage();
+        }
     }
 
     private byte[] getSenderCertificate() {
@@ -766,61 +788,28 @@ public class Manager implements Closeable {
         return certificate;
     }
 
-    private Set<RecipientId> getRecipientIds(Collection<RecipientIdentifier.Single> recipients) {
-        final var signalServiceAddresses = new HashSet<SignalServiceAddress>(recipients.size());
-        final var addressesMissingUuid = new HashSet<SignalServiceAddress>();
-
-        for (var number : recipients) {
-            final var resolvedAddress = resolveSignalServiceAddress(resolveRecipient(number));
-            if (resolvedAddress.getUuid().isPresent()) {
-                signalServiceAddresses.add(resolvedAddress);
-            } else {
-                addressesMissingUuid.add(resolvedAddress);
-            }
-        }
-
-        final var numbersMissingUuid = addressesMissingUuid.stream()
-                .map(a -> a.getNumber().get())
-                .collect(Collectors.toSet());
-        Map<String, UUID> registeredUsers;
-        try {
-            registeredUsers = getRegisteredUsers(numbersMissingUuid);
-        } catch (IOException e) {
-            logger.warn("Failed to resolve uuids from server, ignoring: {}", e.getMessage());
-            registeredUsers = Map.of();
-        } catch (InvalidNumberException e) {
-            logger.warn("List of users contains invalid number, ignoring: {}", e.getMessage());
-            registeredUsers = Map.of();
-        }
-
-        for (var address : addressesMissingUuid) {
-            final var number = address.getNumber().get();
-            if (registeredUsers.containsKey(number)) {
-                final var newAddress = resolveSignalServiceAddress(resolveRecipientTrusted(new SignalServiceAddress(
-                        registeredUsers.get(number),
-                        number)));
-                signalServiceAddresses.add(newAddress);
-            } else {
-                signalServiceAddresses.add(address);
-            }
-        }
-
-        return signalServiceAddresses.stream().map(this::resolveRecipient).collect(Collectors.toSet());
-    }
-
     private RecipientId refreshRegisteredUser(RecipientId recipientId) throws IOException {
         final var address = resolveSignalServiceAddress(recipientId);
         if (!address.getNumber().isPresent()) {
             return recipientId;
         }
         final var number = address.getNumber().get();
-        Map<String, UUID> uuidMap = null;
+        final var uuid = getRegisteredUser(number);
+        return resolveRecipientTrusted(new SignalServiceAddress(uuid, number));
+    }
+
+    private UUID getRegisteredUser(final String number) throws IOException {
+        final Map<String, UUID> uuidMap;
         try {
             uuidMap = getRegisteredUsers(Set.of(number));
-        } catch (InvalidNumberException e) {
-            logger.warn("List of users contains invalid number, ignoring: {}", e.getMessage());
+        } catch (NumberFormatException | InvalidNumberException e) {
+            throw new UnregisteredUserException(number, e);
         }
-        return resolveRecipientTrusted(new SignalServiceAddress(uuidMap.getOrDefault(number, null), number));
+        final var uuid = uuidMap.get(number);
+        if (uuid == null) {
+            throw new UnregisteredUserException(number, null);
+        }
+        return uuid;
     }
 
     private Map<String, UUID> getRegisteredUsers(final Set<String> numbers) throws IOException, InvalidNumberException {
@@ -868,37 +857,33 @@ public class Manager implements Closeable {
     ) {
         var envelope = cachedMessage.loadEnvelope();
         if (envelope == null) {
+            cachedMessage.delete();
             return null;
         }
-        SignalServiceContent content = null;
-        List<HandleAction> actions = null;
-        if (!envelope.isReceipt()) {
-            try {
-                content = dependencies.getCipher().decrypt(envelope);
-            } catch (ProtocolUntrustedIdentityException e) {
-                if (System.currentTimeMillis() - envelope.getServerDeliveredTimestamp() > 1000L * 60 * 60 * 24 * 30) {
-                    // Envelope is more than a month old, cleaning up.
-                    cachedMessage.delete();
-                    return null;
-                }
-                if (!envelope.hasSource()) {
-                    final var identifier = e.getSender();
-                    final var recipientId = resolveRecipient(identifier);
-                    try {
-                        account.getMessageCache().replaceSender(cachedMessage, recipientId);
-                    } catch (IOException ioException) {
-                        logger.warn("Failed to move cached message to recipient folder: {}", ioException.getMessage());
-                    }
-                }
-                return null;
-            } catch (Exception er) {
-                // All other errors are not recoverable, so delete the cached message
+
+        final var result = incomingMessageHandler.handleRetryEnvelope(envelope, ignoreAttachments, handler);
+        final var actions = result.first();
+        final var exception = result.second();
+
+        if (exception instanceof UntrustedIdentityException) {
+            if (System.currentTimeMillis() - envelope.getServerDeliveredTimestamp() > 1000L * 60 * 60 * 24 * 30) {
+                // Envelope is more than a month old, cleaning up.
                 cachedMessage.delete();
                 return null;
             }
-            actions = incomingMessageHandler.handleMessage(envelope, content, ignoreAttachments);
+            if (!envelope.hasSourceUuid()) {
+                final var identifier = ((UntrustedIdentityException) exception).getSender();
+                final var recipientId = account.getRecipientStore().resolveRecipient(identifier);
+                try {
+                    account.getMessageCache().replaceSender(cachedMessage, recipientId);
+                } catch (IOException ioException) {
+                    logger.warn("Failed to move cached message to recipient folder: {}", ioException.getMessage());
+                }
+            }
+            return null;
         }
-        handler.handleMessage(envelope, content, null);
+
+        // If successful and for all other errors that are not recoverable, delete the cached message
         cachedMessage.delete();
         return actions;
     }
@@ -917,7 +902,7 @@ public class Manager implements Closeable {
         final var signalWebSocket = dependencies.getSignalWebSocket();
         signalWebSocket.connect();
 
-        var hasCaughtUpWithOldMessages = false;
+        hasCaughtUpWithOldMessages = false;
 
         while (!Thread.interrupted()) {
             SignalServiceEnvelope envelope;
@@ -930,8 +915,8 @@ public class Manager implements Closeable {
             account.setLastReceiveTimestamp(System.currentTimeMillis());
             try {
                 var result = signalWebSocket.readOrEmpty(unit.toMillis(timeout), envelope1 -> {
-                    final var recipientId = envelope1.hasSource()
-                            ? resolveRecipient(envelope1.getSourceIdentifier())
+                    final var recipientId = envelope1.hasSourceUuid()
+                            ? resolveRecipient(envelope1.getSourceAddress())
                             : null;
                     // store message on disk, before acknowledging receipt to the server
                     cachedMessage[0] = account.getMessageCache().cacheMessage(envelope1, recipientId);
@@ -941,10 +926,13 @@ public class Manager implements Closeable {
                     envelope = result.get();
                 } else {
                     // Received indicator that server queue is empty
-                    hasCaughtUpWithOldMessages = true;
-
                     handleQueuedActions(queuedActions);
                     queuedActions.clear();
+
+                    hasCaughtUpWithOldMessages = true;
+                    synchronized (this) {
+                        this.notifyAll();
+                    }
 
                     // Continue to wait another timeout for new messages
                     continue;
@@ -977,10 +965,10 @@ public class Manager implements Closeable {
                 handleQueuedActions(queuedActions);
             }
             if (cachedMessage[0] != null) {
-                if (exception instanceof ProtocolUntrustedIdentityException) {
-                    final var identifier = ((ProtocolUntrustedIdentityException) exception).getSender();
-                    final var recipientId = resolveRecipient(identifier);
-                    if (!envelope.hasSource()) {
+                if (exception instanceof UntrustedIdentityException) {
+                    final var address = ((UntrustedIdentityException) exception).getSender();
+                    final var recipientId = resolveRecipient(address);
+                    if (!envelope.hasSourceUuid()) {
                         try {
                             cachedMessage[0] = account.getMessageCache().replaceSender(cachedMessage[0], recipientId);
                         } catch (IOException ioException) {
@@ -996,21 +984,36 @@ public class Manager implements Closeable {
         handleQueuedActions(queuedActions);
     }
 
+    public boolean hasCaughtUpWithOldMessages() {
+        return hasCaughtUpWithOldMessages;
+    }
+
     private void handleQueuedActions(final Collection<HandleAction> queuedActions) {
+        var interrupted = false;
         for (var action : queuedActions) {
             try {
                 action.execute(context);
             } catch (Throwable e) {
-                if (e instanceof AssertionError && e.getCause() instanceof InterruptedException) {
-                    Thread.currentThread().interrupt();
+                if ((e instanceof AssertionError || e instanceof RuntimeException)
+                        && e.getCause() instanceof InterruptedException) {
+                    interrupted = true;
+                    continue;
                 }
                 logger.warn("Message action failed.", e);
             }
         }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public boolean isContactBlocked(final RecipientIdentifier.Single recipient) {
-        final var recipientId = resolveRecipient(recipient);
+        final RecipientId recipientId;
+        try {
+            recipientId = resolveRecipient(recipient);
+        } catch (UnregisteredUserException e) {
+            return false;
+        }
         return contactHelper.isContactBlocked(recipientId);
     }
 
@@ -1027,7 +1030,12 @@ public class Manager implements Closeable {
     }
 
     public String getContactOrProfileName(RecipientIdentifier.Single recipientIdentifier) {
-        final var recipientId = resolveRecipient(recipientIdentifier);
+        final RecipientId recipientId;
+        try {
+            recipientId = resolveRecipient(recipientIdentifier);
+        } catch (UnregisteredUserException e) {
+            return null;
+        }
 
         final var contact = account.getContactStore().getContact(recipientId);
         if (contact != null && !Util.isEmpty(contact.getName())) {
@@ -1051,7 +1059,12 @@ public class Manager implements Closeable {
     }
 
     public List<IdentityInfo> getIdentities(RecipientIdentifier.Single recipient) {
-        final var identity = account.getIdentityKeyStore().getIdentity(resolveRecipient(recipient));
+        IdentityInfo identity;
+        try {
+            identity = account.getIdentityKeyStore().getIdentity(resolveRecipient(recipient));
+        } catch (UnregisteredUserException e) {
+            identity = null;
+        }
         return identity == null ? List.of() : List.of(identity);
     }
 
@@ -1062,7 +1075,12 @@ public class Manager implements Closeable {
      * @param fingerprint Fingerprint
      */
     public boolean trustIdentityVerified(RecipientIdentifier.Single recipient, byte[] fingerprint) {
-        var recipientId = resolveRecipient(recipient);
+        RecipientId recipientId;
+        try {
+            recipientId = resolveRecipient(recipient);
+        } catch (UnregisteredUserException e) {
+            return false;
+        }
         return trustIdentity(recipientId,
                 identityKey -> Arrays.equals(identityKey.serialize(), fingerprint),
                 TrustLevel.TRUSTED_VERIFIED);
@@ -1075,8 +1093,13 @@ public class Manager implements Closeable {
      * @param safetyNumber Safety number
      */
     public boolean trustIdentityVerifiedSafetyNumber(RecipientIdentifier.Single recipient, String safetyNumber) {
-        var recipientId = resolveRecipient(recipient);
-        var address = account.getRecipientStore().resolveServiceAddress(recipientId);
+        RecipientId recipientId;
+        try {
+            recipientId = resolveRecipient(recipient);
+        } catch (UnregisteredUserException e) {
+            return false;
+        }
+        var address = resolveSignalServiceAddress(recipientId);
         return trustIdentity(recipientId,
                 identityKey -> safetyNumber.equals(computeSafetyNumber(address, identityKey)),
                 TrustLevel.TRUSTED_VERIFIED);
@@ -1089,8 +1112,13 @@ public class Manager implements Closeable {
      * @param safetyNumber Scannable safety number
      */
     public boolean trustIdentityVerifiedSafetyNumber(RecipientIdentifier.Single recipient, byte[] safetyNumber) {
-        var recipientId = resolveRecipient(recipient);
-        var address = account.getRecipientStore().resolveServiceAddress(recipientId);
+        RecipientId recipientId;
+        try {
+            recipientId = resolveRecipient(recipient);
+        } catch (UnregisteredUserException e) {
+            return false;
+        }
+        var address = resolveSignalServiceAddress(recipientId);
         return trustIdentity(recipientId, identityKey -> {
             final var fingerprint = computeSafetyNumberFingerprint(address, identityKey);
             try {
@@ -1107,7 +1135,12 @@ public class Manager implements Closeable {
      * @param recipient username of the identity
      */
     public boolean trustIdentityAllKeys(RecipientIdentifier.Single recipient) {
-        var recipientId = resolveRecipient(recipient);
+        RecipientId recipientId;
+        try {
+            recipientId = resolveRecipient(recipient);
+        } catch (UnregisteredUserException e) {
+            return false;
+        }
         return trustIdentity(recipientId, identityKey -> true, TrustLevel.TRUSTED_UNVERIFIED);
     }
 
@@ -1125,7 +1158,7 @@ public class Manager implements Closeable {
 
         account.getIdentityKeyStore().setIdentityTrustLevel(recipientId, identity.getIdentityKey(), trustLevel);
         try {
-            var address = account.getRecipientStore().resolveServiceAddress(recipientId);
+            var address = resolveSignalServiceAddress(recipientId);
             syncHelper.sendVerifiedMessage(address, identity.getIdentityKey(), trustLevel);
         } catch (IOException e) {
             logger.warn("Failed to send verification sync message: {}", e.getMessage());
@@ -1169,48 +1202,57 @@ public class Manager implements Closeable {
                 theirIdentityKey);
     }
 
-    @Deprecated
-    public SignalServiceAddress resolveSignalServiceAddress(String identifier) {
-        var address = Utils.getSignalServiceAddressFromIdentifier(identifier);
-
-        return resolveSignalServiceAddress(address);
+    public SignalServiceAddress resolveSignalServiceAddress(SignalServiceAddress address) {
+        return resolveSignalServiceAddress(resolveRecipient(address));
     }
 
-    @Deprecated
-    public SignalServiceAddress resolveSignalServiceAddress(SignalServiceAddress address) {
-        if (address.matches(account.getSelfAddress())) {
-            return account.getSelfAddress();
-        }
-
-        return account.getRecipientStore().resolveServiceAddress(address);
+    public SignalServiceAddress resolveSignalServiceAddress(UUID uuid) {
+        return resolveSignalServiceAddress(account.getRecipientStore().resolveRecipient(uuid));
     }
 
     public SignalServiceAddress resolveSignalServiceAddress(RecipientId recipientId) {
-        return account.getRecipientStore().resolveServiceAddress(recipientId);
-    }
-
-    private String canonicalizePhoneNumber(final String number) throws InvalidNumberException {
-        return PhoneNumberFormatter.formatNumber(number, account.getUsername());
-    }
-
-    private RecipientId resolveRecipient(final String identifier) {
-        var address = Utils.getSignalServiceAddressFromIdentifier(identifier);
-
-        return resolveRecipient(address);
-    }
-
-    private RecipientId resolveRecipient(final RecipientIdentifier.Single recipient) {
-        final SignalServiceAddress address;
-        if (recipient instanceof RecipientIdentifier.Uuid) {
-            address = new SignalServiceAddress(((RecipientIdentifier.Uuid) recipient).uuid, null);
-        } else {
-            address = new SignalServiceAddress(null, ((RecipientIdentifier.Number) recipient).number);
+        final var address = account.getRecipientStore().resolveRecipientAddress(recipientId);
+        if (address.getUuid().isPresent()) {
+            return address.toSignalServiceAddress();
         }
 
-        return resolveRecipient(address);
+        // Address in recipient store doesn't have a uuid, this shouldn't happen
+        // Try to retrieve the uuid from the server
+        final var number = address.getNumber().get();
+        try {
+            return resolveSignalServiceAddress(getRegisteredUser(number));
+        } catch (IOException e) {
+            logger.warn("Failed to get uuid for e164 number: {}", number, e);
+            // Return SignalServiceAddress with unknown UUID
+            return address.toSignalServiceAddress();
+        }
     }
 
-    public RecipientId resolveRecipient(SignalServiceAddress address) {
+    private Set<RecipientId> resolveRecipients(Collection<RecipientIdentifier.Single> recipients) throws UnregisteredUserException {
+        final var recipientIds = new HashSet<RecipientId>(recipients.size());
+        for (var number : recipients) {
+            final var recipientId = resolveRecipient(number);
+            recipientIds.add(recipientId);
+        }
+        return recipientIds;
+    }
+
+    private RecipientId resolveRecipient(final RecipientIdentifier.Single recipient) throws UnregisteredUserException {
+        if (recipient instanceof RecipientIdentifier.Uuid) {
+            return account.getRecipientStore().resolveRecipient(((RecipientIdentifier.Uuid) recipient).uuid);
+        } else {
+            final var number = ((RecipientIdentifier.Number) recipient).number;
+            return account.getRecipientStore().resolveRecipient(number, () -> {
+                try {
+                    return getRegisteredUser(number);
+                } catch (IOException e) {
+                    return null;
+                }
+            });
+        }
+    }
+
+    private RecipientId resolveRecipient(SignalServiceAddress address) {
         return account.getRecipientStore().resolveRecipient(address);
     }
 

@@ -13,6 +13,7 @@ import org.whispersystems.libsignal.state.SessionRecord;
 import org.whispersystems.libsignal.state.SignedPreKeyRecord;
 import org.whispersystems.libsignal.state.SignedPreKeyStore;
 import org.whispersystems.signalservice.api.SignalServiceDataStore;
+import org.whispersystems.signalservice.api.SignalServiceSenderKeyStore;
 import org.whispersystems.signalservice.api.SignalServiceSessionStore;
 import org.whispersystems.signalservice.api.push.DistributionId;
 
@@ -28,6 +29,7 @@ public class SignalProtocolStore implements SignalServiceDataStore {
     private final SignedPreKeyStore signedPreKeyStore;
     private final SignalServiceSessionStore sessionStore;
     private final IdentityKeyStore identityKeyStore;
+    private final SignalServiceSenderKeyStore senderKeyStore;
     private final Supplier<Boolean> isMultiDevice;
 
     public SignalProtocolStore(
@@ -35,12 +37,14 @@ public class SignalProtocolStore implements SignalServiceDataStore {
             final SignedPreKeyStore signedPreKeyStore,
             final SignalServiceSessionStore sessionStore,
             final IdentityKeyStore identityKeyStore,
+            final SignalServiceSenderKeyStore senderKeyStore,
             final Supplier<Boolean> isMultiDevice
     ) {
         this.preKeyStore = preKeyStore;
         this.signedPreKeyStore = signedPreKeyStore;
         this.sessionStore = sessionStore;
         this.identityKeyStore = identityKeyStore;
+        this.senderKeyStore = senderKeyStore;
         this.isMultiDevice = isMultiDevice;
     }
 
@@ -130,6 +134,11 @@ public class SignalProtocolStore implements SignalServiceDataStore {
     }
 
     @Override
+    public Set<SignalProtocolAddress> getAllAddressesWithActiveSessions(final List<String> addressNames) {
+        return sessionStore.getAllAddressesWithActiveSessions(addressNames);
+    }
+
+    @Override
     public SignedPreKeyRecord loadSignedPreKey(int signedPreKeyId) throws InvalidKeyIdException {
         return signedPreKeyStore.loadSignedPreKey(signedPreKeyId);
     }
@@ -158,35 +167,40 @@ public class SignalProtocolStore implements SignalServiceDataStore {
     public void storeSenderKey(
             final SignalProtocolAddress sender, final UUID distributionId, final SenderKeyRecord record
     ) {
-        // TODO
+        senderKeyStore.storeSenderKey(sender, distributionId, record);
     }
 
     @Override
     public SenderKeyRecord loadSenderKey(final SignalProtocolAddress sender, final UUID distributionId) {
-        // TODO
-        return null;
+        return senderKeyStore.loadSenderKey(sender, distributionId);
     }
 
     @Override
     public Set<SignalProtocolAddress> getSenderKeySharedWith(final DistributionId distributionId) {
-        // TODO
-        return null;
+        return senderKeyStore.getSenderKeySharedWith(distributionId);
     }
 
     @Override
     public void markSenderKeySharedWith(
             final DistributionId distributionId, final Collection<SignalProtocolAddress> addresses
     ) {
-        // TODO
+        senderKeyStore.markSenderKeySharedWith(distributionId, addresses);
     }
 
     @Override
     public void clearSenderKeySharedWith(final Collection<SignalProtocolAddress> addresses) {
-        // TODO
+        senderKeyStore.clearSenderKeySharedWith(addresses);
     }
 
     @Override
     public boolean isMultiDevice() {
         return isMultiDevice.get();
+    }
+
+    @Override
+    public Transaction beginTransaction() {
+        return () -> {
+            // No-op transaction should be safe, as it's only a performance improvement
+        };
     }
 }

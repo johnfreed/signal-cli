@@ -1,12 +1,12 @@
 package org.asamk.signal;
 
 import org.asamk.signal.manager.Manager;
+import org.asamk.signal.manager.UntrustedIdentityException;
 import org.asamk.signal.manager.api.RecipientIdentifier;
 import org.asamk.signal.manager.groups.GroupId;
 import org.asamk.signal.manager.groups.GroupUtils;
 import org.asamk.signal.util.DateUtils;
 import org.asamk.signal.util.Util;
-import org.signal.libsignal.metadata.ProtocolUntrustedIdentityException;
 import org.slf4j.helpers.MessageFormatter;
 import org.whispersystems.signalservice.api.messages.SignalServiceAttachment;
 import org.whispersystems.signalservice.api.messages.SignalServiceContent;
@@ -38,12 +38,9 @@ public class ReceiveMessageHandler implements Manager.ReceiveMessageHandler {
 
     @Override
     public void handleMessage(SignalServiceEnvelope envelope, SignalServiceContent content, Throwable exception) {
-        if (envelope.hasSource()) {
+        if (envelope.hasSourceUuid()) {
             var source = envelope.getSourceAddress();
             writer.println("Envelope from: {} (device: {})", formatContact(source), envelope.getSourceDevice());
-            if (source.getRelay().isPresent()) {
-                writer.println("Relayed by: {}", source.getRelay().get());
-            }
         } else {
             writer.println("Envelope from: unknown source");
         }
@@ -56,8 +53,8 @@ public class ReceiveMessageHandler implements Manager.ReceiveMessageHandler {
             writer.println("Got receipt.");
         } else if (envelope.isSignalMessage() || envelope.isPreKeySignalMessage() || envelope.isUnidentifiedSender()) {
             if (exception != null) {
-                if (exception instanceof ProtocolUntrustedIdentityException) {
-                    var e = (ProtocolUntrustedIdentityException) exception;
+                if (exception instanceof UntrustedIdentityException) {
+                    var e = (UntrustedIdentityException) exception;
                     writer.println(
                             "The user’s key is untrusted, either the user has reinstalled Signal or a third party sent this message.");
                     final var recipientName = getLegacyIdentifier(m.resolveSignalServiceAddress(e.getSender()));
@@ -84,6 +81,12 @@ public class ReceiveMessageHandler implements Manager.ReceiveMessageHandler {
                 writer.println("Server timestamps: received: {} delivered: {}",
                         DateUtils.formatTimestamp(content.getServerReceivedTimestamp()),
                         DateUtils.formatTimestamp(content.getServerDeliveredTimestamp()));
+
+                if (content.getSenderKeyDistributionMessage().isPresent()) {
+                    final var message = content.getSenderKeyDistributionMessage().get();
+                    writer.println("Received a sender key distribution message for distributionId {}",
+                            message.getDistributionId());
+                }
 
                 if (content.getDataMessage().isPresent()) {
                     var message = content.getDataMessage().get();
@@ -238,6 +241,13 @@ public class ReceiveMessageHandler implements Manager.ReceiveMessageHandler {
             final var deviceId = callMessage.getDestinationDeviceId().get();
             writer.println("Destination device id: {}", deviceId);
         }
+        if (callMessage.getGroupId().isPresent()) {
+            final var groupId = GroupId.unknownVersion(callMessage.getGroupId().get());
+            writer.println("Destination group id: {}", groupId);
+        }
+        if (callMessage.getTimestamp().isPresent()) {
+            writer.println("Timestamp: {}", DateUtils.formatTimestamp(callMessage.getTimestamp().get()));
+        }
         if (callMessage.getAnswerMessage().isPresent()) {
             var answerMessage = callMessage.getAnswerMessage().get();
             writer.println("Answer message: {}, sdp: {})", answerMessage.getId(), answerMessage.getSdp());
@@ -263,7 +273,9 @@ public class ReceiveMessageHandler implements Manager.ReceiveMessageHandler {
         }
         if (callMessage.getOpaqueMessage().isPresent()) {
             final var opaqueMessage = callMessage.getOpaqueMessage().get();
-            writer.println("Opaque message: size {}", opaqueMessage.getOpaque().length);
+            writer.println("Opaque message: size {}, urgency: {}",
+                    opaqueMessage.getOpaque().length,
+                    opaqueMessage.getUrgency().name());
         }
     }
 
@@ -630,7 +642,7 @@ public class ReceiveMessageHandler implements Manager.ReceiveMessageHandler {
     private void printMention(
             PlainTextWriter writer, SignalServiceDataMessage.Mention mention
     ) {
-        final var address = m.resolveSignalServiceAddress(new SignalServiceAddress(mention.getUuid(), null));
+        final var address = m.resolveSignalServiceAddress(mention.getUuid());
         writer.println("- {}: {} (length: {})", formatContact(address), mention.getStart(), mention.getLength());
     }
 
