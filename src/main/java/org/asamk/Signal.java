@@ -4,6 +4,7 @@ import org.freedesktop.dbus.exceptions.DBusException;
 import org.freedesktop.dbus.exceptions.DBusExecutionException;
 import org.freedesktop.dbus.interfaces.DBusInterface;
 import org.freedesktop.dbus.messages.DBusSignal;
+import org.whispersystems.signalservice.api.crypto.UntrustedIdentityException;
 
 import java.util.List;
 

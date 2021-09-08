@@ -3,8 +3,11 @@ package org.asamk.signal.dbus;
 import org.asamk.Signal;
 import org.asamk.signal.BaseConfig;
 import org.asamk.signal.DbusConfig;
+import org.asamk.signal.JsonWriter;
+import org.asamk.signal.PlainTextWriter;
 import org.asamk.signal.commands.DaemonCommand;
 import org.asamk.signal.commands.UpdateGroupCommand;
+import org.asamk.signal.commands.ListIdentitiesCommand;
 import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.manager.AttachmentInvalidException;
 import org.asamk.signal.manager.Manager;
@@ -24,6 +27,7 @@ import org.asamk.signal.manager.groups.LastGroupAdminException;
 import org.asamk.signal.manager.groups.NotAGroupMemberException;
 import org.asamk.signal.manager.storage.groups.GroupInfo;
 import org.asamk.signal.manager.storage.identities.IdentityInfo;
+import org.asamk.signal.manager.storage.recipients.RecipientId;
 import org.asamk.signal.util.CommandUtil;
 import org.asamk.signal.util.ErrorUtils;
 import org.asamk.signal.util.Hex;
@@ -40,6 +44,7 @@ import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.api.crypto.UntrustedIdentityException;
 import org.whispersystems.signalservice.api.groupsv2.GroupLinkNotActiveException;
 import org.whispersystems.signalservice.api.messages.SendMessageResult;
+import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 import org.whispersystems.signalservice.api.push.exceptions.UnregisteredUserException;
 import org.whispersystems.signalservice.api.util.InvalidNumberException;
 import org.whispersystems.signalservice.internal.contacts.crypto.UnauthenticatedResponseException;
@@ -111,11 +116,13 @@ public class DbusSignalImpl implements Signal {
         if (identities.isEmpty()) {return results;}
         theirId = identities.get(0);
         final SignalServiceAddress address = m.resolveSignalServiceAddress(theirId.getRecipientId());
-        var digits = Util.formatSafetyNumber(m.computeSafetyNumber(address, theirId.getIdentityKey()));
+		var safetyNumber = Util.formatSafetyNumber(m.computeSafetyNumber(address, theirId.getIdentityKey()));
+		var scannableSafetyNumber = m.computeSafetyNumberForScanning(address, theirId.getIdentityKey());
+
         results.add(theirId.getTrustLevel().toString());
         results.add(theirId.getDateAdded().toString());
         results.add(Hex.toString(theirId.getFingerprint()));
-        results.add(digits);
+        results.add(safetyNumber);
         return results;
     }
 
@@ -137,6 +144,7 @@ public class DbusSignalImpl implements Signal {
         }
         return results;
     }
+
     @Override
     public long sendMessage(final String message, final List<String> attachments, final String recipient) {
         var recipients = new ArrayList<String>(1);
@@ -430,7 +438,7 @@ public class DbusSignalImpl implements Signal {
     }
 
     @Override
-    public void sendTyping(boolean typingAction, List<String> base64GroupIds, List<String>numbers) {
+    public void sendTyping(boolean typingAction, List<String> base64GroupIds, List<String> numbers) {
         final boolean noNumbers = numbers == null || numbers.isEmpty();
         final boolean noGroup = base64GroupIds == null || base64GroupIds.isEmpty();
         if (noNumbers && noGroup) {
@@ -451,14 +459,14 @@ public class DbusSignalImpl implements Signal {
                 recipients.addAll(CommandUtil.getSingleRecipientIdentifiers(numbers, localNumber));
             }
             m.sendTypingMessage(action, recipients);
-        } catch (UntrustedIdentityException e) {
-            throw new Error.UntrustedIdentity("Failed to send message: " + e.getMessage());
         } catch (IOException e) {
             throw new Error.Failure("Failed to send message: " + e.getMessage());
         } catch (GroupNotFoundException | NotAGroupMemberException | GroupSendingNotAllowedException e) {
             throw new Error.InvalidGroupId("Invalid group id: " + e.getMessage());
         } catch (UserErrorException e) {
             throw new Error.Failure("Invalid number: " + e.getMessage());
+        } catch (Exception e) {
+            throw new Error.UntrustedIdentity("Failed to send message: " + e.getMessage());
         }
     }
 
@@ -1059,8 +1067,6 @@ public class DbusSignalImpl implements Signal {
             }
         } catch (IOException e) {
             throw new Error.Failure(e.getMessage());
-        } catch (InvalidNumberException e) {
-            throw new Error.InvalidNumber(e.getMessage());
         }
         return results;
     }

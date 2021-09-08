@@ -379,7 +379,7 @@ public class App {
                 manager.getAccount().close();
             } catch (IOException ignore) {
             }
-            throw new UnexpectedErrorException("Error while checking account " + username + ": " + e.getMessage());
+            throw new UnexpectedErrorException("Error while checking account " + username + ": " + e.getMessage(), e);
         }
 
         return manager;
