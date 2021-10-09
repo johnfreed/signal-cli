@@ -29,7 +29,7 @@ method(arg1<type>, arg2<type>, ...) -> return<type>
 
 Where <type> is according to DBus specification:
 
-* <a>   : Array of ... (comma-separated list)
+* <a>   : Array of ... (comma-separated list, array:)
 * (...) : Struct (cannot be sent via `dbus-send`)
 * <b>   : Boolean (false|true) (boolean:)
 * <i>   : Signed 32-bit (int) integer (int32:)
