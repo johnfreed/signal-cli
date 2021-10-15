@@ -12,6 +12,7 @@ import org.asamk.signal.commands.exceptions.UnexpectedErrorException;
 import org.asamk.signal.commands.exceptions.UserErrorException;
 import org.asamk.signal.manager.AttachmentInvalidException;
 import org.asamk.signal.manager.Manager;
+import org.asamk.signal.manager.api.UpdateGroup;
 import org.asamk.signal.manager.groups.GroupId;
 import org.asamk.signal.manager.groups.GroupLinkState;
 import org.asamk.signal.manager.groups.GroupNotFoundException;
@@ -72,7 +73,7 @@ public class UpdateGroupCommand implements JsonRpcLocalCommand {
         subparser.addArgument("-e", "--expiration").type(int.class).help("Set expiration time of messages (seconds)");
     }
 
-    public static GroupLinkState getGroupLinkState(String value) throws UserErrorException {
+    GroupLinkState getGroupLinkState(String value) throws UserErrorException {
         if (value == null) {
             return null;
         }
@@ -89,7 +90,7 @@ public class UpdateGroupCommand implements JsonRpcLocalCommand {
         }
     }
 
-    public static GroupPermission getGroupPermission(String value) throws UserErrorException {
+    GroupPermission getGroupPermission(String value) throws UserErrorException {
         if (value == null) {
             return null;
         }
@@ -145,21 +146,23 @@ public class UpdateGroupCommand implements JsonRpcLocalCommand {
             }
 
             var results = m.updateGroup(groupId,
-                    groupName,
-                    groupDescription,
-                    groupMembers,
-                    groupRemoveMembers,
-                    groupAdmins,
-                    groupRemoveAdmins,
-                    groupResetLink,
-                    groupLinkState,
-                    groupAddMemberPermission,
-                    groupEditDetailsPermission,
-                    groupAvatar == null ? null : new File(groupAvatar),
-                    groupExpiration,
-                    groupSendMessagesPermission == null
-                            ? null
-                            : groupSendMessagesPermission == GroupPermission.ONLY_ADMINS);
+                    UpdateGroup.newBuilder()
+                            .withName(groupName)
+                            .withDescription(groupDescription)
+                            .withMembers(groupMembers)
+                            .withRemoveMembers(groupRemoveMembers)
+                            .withAdmins(groupAdmins)
+                            .withRemoveAdmins(groupRemoveAdmins)
+                            .withResetGroupLink(groupResetLink)
+                            .withGroupLinkState(groupLinkState)
+                            .withAddMemberPermission(groupAddMemberPermission)
+                            .withEditDetailsPermission(groupEditDetailsPermission)
+                            .withAvatarFile(groupAvatar == null ? null : new File(groupAvatar))
+                            .withExpirationTimer(groupExpiration)
+                            .withIsAnnouncementGroup(groupSendMessagesPermission == null
+                                    ? null
+                                    : groupSendMessagesPermission == GroupPermission.ONLY_ADMINS)
+                            .build());
             if (results != null) {
                 timestamp = results.getTimestamp();
                 ErrorUtils.handleSendMessageResults(results.getResults());

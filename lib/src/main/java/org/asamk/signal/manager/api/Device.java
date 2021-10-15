@@ -3,7 +3,7 @@ package org.asamk.signal.manager.api;
 public class Device {
 
     private final long id;
-    private String name;
+    private final String name;
     private final long created;
     private final long lastSeen;
     private final boolean thisDevice;
@@ -34,9 +34,5 @@ public class Device {
 
     public boolean isThisDevice() {
         return thisDevice;
-    }
-
-    public void setName(String deviceName) {
-        this.name = deviceName;
     }
 }
