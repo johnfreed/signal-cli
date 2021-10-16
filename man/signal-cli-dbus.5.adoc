@@ -260,8 +260,8 @@ The following deprecated methods listen to the recipient's object path, which is
 
 * DBusNumber  : recipient's phone number, with underscore (_) replacing plus (+)
 
-getGroupIds() -> groupIds<aay>::
-groupIds : Array of Byte arrays representing the internal group identifiers
+getGroupIds() -> groupList<aay>::
+groupList : Array of Byte arrays representing the internal group identifiers
 
 All groups known are returned, regardless of their active or blocked status.
 
@@ -306,7 +306,7 @@ Replacement: Use the `IsMember` property.
 Exceptions: None
 
 quitGroup(groupId<ay>) -> <>::
-* groupId        : Byte array representing the internal group identifier
+* groupId : Byte array representing the internal group identifier
 
 Note that quitting a group will not remove the group from the getGroupIds command, but set it inactive which can be tested with isMember()
 
