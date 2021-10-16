@@ -1,5 +1,6 @@
 package org.asamk;
 
+import org.asamk.Signal.Error;
 import org.asamk.signal.commands.exceptions.IOErrorException;
 import org.freedesktop.dbus.DBusPath;
 import org.freedesktop.dbus.Struct;
@@ -25,39 +26,15 @@ public interface Signal extends DBusInterface {
             String message, List<String> attachments, String recipient
     ) throws Error.AttachmentInvalid, Error.Failure, Error.InvalidNumber, Error.UntrustedIdentity;
 
-    List<String> getGroupAdminMembers(final byte[] groupId);
+    long sendMessage(
+            String message, List<String> attachments, List<String> recipients
+    ) throws Error.AttachmentInvalid, Error.Failure, Error.InvalidNumber, Error.UntrustedIdentity;
 
-    List<byte[]> getGroupIds();
+    void sendEndSessionMessage(List<String> recipients);
 
-    byte[] getGroupId(String groupName) throws Error.GroupNotFound;
-
-    List<String> getGroupIdStrings();
-
-    String getGroupIdString(String groupName) throws Error.GroupNotFound;
-
-    String getGroupInviteUri(byte[] groupId);
-
-    List<String> getGroupMembers(byte[] groupId) throws Error.InvalidGroupId;
-
-    String getGroupName(byte[] groupId) throws Error.InvalidGroupId;
-
-    List<String> getGroupNames();
-
-    List<String> getGroupPendingMembers(final byte[] groupId);
-
-    List<String> getGroupRequestingMembers(final byte[] groupId);
-
-    boolean isAdmin(final byte[] groupId);
-
-    boolean isGroupAnnounceOnly(byte[] groupId);
-
-    boolean isGroupBlocked(final byte[] groupId) throws Error.InvalidGroupId;
-
-    boolean isMember(final byte[] groupId) throws Error.InvalidGroupId;
+    List<byte[]> identifyGroup(String groupName) throws Error.GroupNotFound;
 
     byte[] joinGroup(final String groupLink) throws Error.Failure;
-
-    void quitGroup(final byte[] groupId) throws Error.GroupNotFound, Error.Failure, Error.InvalidGroupId;
 
     long sendGroupMessage(
             String message, List<String> attachments, byte[] groupId
@@ -71,16 +48,13 @@ public interface Signal extends DBusInterface {
             long targetSentTimestamp, byte[] groupId
     ) throws Error.Failure, Error.GroupNotFound, Error.InvalidGroupId;
 
-    void setGroupAnnounceOnly(byte[] groupId, boolean isAnnouncementGroup);
 
     void setExpirationTimer(final String number, final int expiration) throws Error.Failure;
 
-    void setContactBlocked(String number, boolean blocked) throws Error.InvalidNumber;
 
     @Deprecated
     void setGroupBlocked(byte[] groupId, boolean blocked) throws Error.GroupNotFound, Error.InvalidGroupId;
 
-    @Deprecated
     List<byte[]> getGroupIds();
 
     DBusPath getGroup(byte[] groupId);
@@ -101,16 +75,6 @@ public interface Signal extends DBusInterface {
     byte[] updateGroup(
             byte[] groupId, String name, List<String> members, String avatar
     ) throws Error.AttachmentInvalid, Error.Failure, Error.InvalidNumber, Error.GroupNotFound, Error.InvalidGroupId;
-
-    byte[] updateGroup(
-            byte[] groupId, String name, String description, List<String> addMembers, List<String> removeMembers, List<String> addAdmins, List<String> removeAdmins, boolean resetGroupLink, String groupLinkState, String addMemberPermission, String editDetailsPermission, String avatar, Integer expirationTimer, Boolean isAnnouncementGroup
-    ) throws Error.AttachmentInvalid, Error.Failure, Error.InvalidNumber, Error.GroupNotFound, Error.InvalidGroupId;
-
-    byte[] updateGroup(
-            byte[] groupId, String name, String description, List<String> addMembers, List<String> removeMembers, List<String> addAdmins, List<String> removeAdmins, boolean resetGroupLink, String groupLinkState, String addMemberPermission, String editDetailsPermission, String avatar, Integer expirationTimer
-    ) throws Error.AttachmentInvalid, Error.Failure, Error.InvalidNumber, Error.GroupNotFound, Error.InvalidGroupId;
-
-    List<String> updateMembers(final byte[] groupId, List<String> members, boolean addToMembers);
 
     void sendContacts() throws Error.Failure;
 
@@ -188,7 +152,8 @@ public interface Signal extends DBusInterface {
             String message, List<String> attachments
     ) throws Error.AttachmentInvalid, Error.Failure;
 
-    void sendTyping(boolean typingAction, List<String> groupIdStrings, List<String> numbers) throws Error.Failure, Error.GroupNotFound, Error.UntrustedIdentity;
+    void sendTyping(String recipient, boolean stop) throws Error.Failure, Error.UntrustedIdentity;
+    void sendTyping(boolean stop, List<String> groupIdStrings, List<String> numbers) throws Error.Failure, Error.GroupNotFound, Error.UntrustedIdentity;
 
     void updateProfile(
             String name, String about, String aboutEmoji, String avatarPath, boolean removeAvatar
@@ -352,10 +317,6 @@ public interface Signal extends DBusInterface {
     interface Device extends DBusInterface, Properties {
 
         void removeDevice() throws Error.Failure;
-
-        String getDeviceName() throws Error.Failure;
-
-        void setDeviceName(String deviceName) throws Error.Failure;
 
     }
 
